@@ -511,7 +511,7 @@ export class WindowsManager implements IWindowsMainService {
 		// Handle folders to add by looking for the last active workspace (not on initial startup)
 		if (!openConfig.initialStartup && foldersToAdd.length > 0) {
 			const authority = getRemoteAuthority(foldersToAdd[0]);
-			const lastActiveWindow = authority ? this.getLastActiveWindowForAuthority(authority) : undefined;
+			const lastActiveWindow = this.getLastActiveWindowForAuthority(authority);
 			if (lastActiveWindow) {
 				usedWindows.push(this.doAddFoldersToExistingWindow(lastActiveWindow, foldersToAdd));
 			}
@@ -762,8 +762,6 @@ export class WindowsManager implements IWindowsMainService {
 	}
 
 	private getPathsToOpen(openConfig: IOpenConfiguration): IPathToOpen[] {
-		debugger;
-
 		let windowsToOpen: IPathToOpen[];
 		let isCommandLineOrAPICall = false;
 
@@ -1552,7 +1550,7 @@ export class WindowsManager implements IWindowsMainService {
 		return getLastActiveWindow(WindowsManager.WINDOWS);
 	}
 
-	getLastActiveWindowForAuthority(remoteAuthority: string): ICodeWindow | undefined {
+	getLastActiveWindowForAuthority(remoteAuthority: string | undefined): ICodeWindow | undefined {
 		return getLastActiveWindow(WindowsManager.WINDOWS.filter(w => w.remoteAuthority === remoteAuthority));
 	}
 

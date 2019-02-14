@@ -175,7 +175,7 @@ import { LifecycleService } from 'vs/platform/lifecycle/electron-browser/lifecyc
 import { ToggleDevToolsAction } from 'vs/workbench/electron-browser/actions/developerActions';
 import { registerWindowDriver } from 'vs/platform/driver/electron-browser/driver';
 import { IExtensionUrlHandler, ExtensionUrlHandler } from 'vs/workbench/services/extensions/electron-browser/inactiveExtensionUrlHandler';
-import { WorkbenchThemeService } from 'vs/workbench/services/themes/electron-browser/workbenchThemeService';
+import { WorkbenchThemeService } from 'vs/workbench/services/themes/browser/workbenchThemeService';
 import { DialogService, FileDialogService } from 'vs/workbench/services/dialogs/electron-browser/dialogService';
 import { ShowPreviousWindowTab, MoveWindowTabToNewWindow, MergeAllWindowTabs, ShowNextWindowTab, ToggleWindowTabsBar, NewWindowTab, OpenRecentAction, ReloadWindowAction, ReloadWindowWithExtensionsDisabledAction } from 'vs/workbench/electron-browser/actions/windowActions';
 import { IBroadcastService, BroadcastService } from 'vs/workbench/services/broadcast/electron-browser/broadcastService';
@@ -1652,7 +1652,7 @@ export class Workbench extends Disposable implements IPartService {
 		let offset = 0;
 		if (this.isVisible(Parts.TITLEBAR_PART)) {
 			if (this.workbenchGrid instanceof Grid) {
-				offset = this.gridHasView(this.titlebarPartView) ? this.workbenchGrid.getViewSize2(this.titlebarPartView).height : 0;
+				offset = this.titlebarPart.maximumHeight;
 			} else {
 				offset = this.workbenchGrid.partLayoutInfo.titlebar.height;
 
