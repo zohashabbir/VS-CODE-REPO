@@ -118,10 +118,14 @@ abstract class AbstractMoveLinesAction extends EditorAction {
 
 		for (const selection of this.down ? selections.reverse() : selections) {
 			editor.executeCommand(this.id, new MoveLinesCommand(selection, this.down, autoIndent));
-			newSelections.push(editor.getSelection());
+
+			let editorSelection = editor.getSelection();
+			if (editorSelection !== null) {
+				newSelections.push(editorSelection);
+			}
 		}
 
-		if (newSelections.length) {
+		if (newSelections.length > 1) {
 			editor.setSelections(newSelections);
 		}
 
