@@ -110,16 +110,21 @@ abstract class AbstractMoveLinesAction extends EditorAction {
 
 	public run(_accessor: ServicesAccessor, editor: ICodeEditor): void {
 
-		let commands: ICommand[] = [];
 		let selections = editor.getSelections() || [];
 		let autoIndent = editor.getConfiguration().autoIndent;
-
-		for (const selection of selections) {
-			commands.push(new MoveLinesCommand(selection, this.down, autoIndent));
-		}
+		let newSelections: Selection[] = [];
 
 		editor.pushUndoStop();
-		editor.executeCommands(this.id, commands);
+
+		for (const selection of this.down ? selections.reverse() : selections) {
+			editor.executeCommand(this.id, new MoveLinesCommand(selection, this.down, autoIndent));
+			newSelections.push(editor.getSelection());
+		}
+
+		if (newSelections.length) {
+			editor.setSelections(newSelections);
+		}
+
 		editor.pushUndoStop();
 	}
 }
