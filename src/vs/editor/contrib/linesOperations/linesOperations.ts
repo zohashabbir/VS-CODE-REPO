@@ -126,6 +126,10 @@ abstract class AbstractMoveLinesAction extends EditorAction {
 		}
 
 		if (newSelections.length > 1) {
+			if (this.down) {
+				newSelections.reverse();
+			}
+
 			editor.setSelections(newSelections);
 		}
 
