@@ -110,30 +110,61 @@ abstract class AbstractMoveLinesAction extends EditorAction {
 
 	public run(_accessor: ServicesAccessor, editor: ICodeEditor): void {
 
+		let commands: ICommand[] = [];
 		let selections = editor.getSelections() || [];
 		let autoIndent = editor.getConfiguration().autoIndent;
+		let movingMultipleLines = false;
+		let selectionDirectionDown = true;
 		let newSelections: Selection[] = [];
 
-		editor.pushUndoStop();
+		if (selections.length > 1) {
+			movingMultipleLines = selections[0].endLineNumber !== selections[selections.length - 1].endLineNumber;
 
-		for (const selection of this.down ? selections.reverse() : selections) {
-			editor.executeCommand(this.id, new MoveLinesCommand(selection, this.down, autoIndent));
+			if (movingMultipleLines) {
+				// Work only with one selection per line
+				selections = selections.filter((s, idx, arr) => {
+					return arr.map(sel => sel['endLineNumber']).indexOf(s['endLineNumber']) === idx;
+				});
 
-			let editorSelection = editor.getSelection();
-			if (editorSelection !== null) {
-				newSelections.push(editorSelection);
+				selectionDirectionDown = selections[0].endLineNumber < selections[selections.length - 1].endLineNumber;
 			}
 		}
 
-		if (newSelections.length > 1) {
-			if (this.down) {
-				newSelections.reverse();
-			}
+		if (movingMultipleLines) {
+			editor.pushUndoStop();
 
-			editor.setSelections(newSelections);
+			if (selectionDirectionDown === this.down) {
+				selections.reverse();
+			}
 		}
 
-		editor.pushUndoStop();
+		for (const selection of selections) {
+			if (movingMultipleLines) {
+				editor.executeCommand(this.id, new MoveLinesCommand(selection, this.down, autoIndent));
+
+				let editorSelection = editor.getSelection();
+				if (editorSelection !== null) {
+					newSelections.push(editorSelection);
+				}
+			} else {
+				commands.push(new MoveLinesCommand(selection, this.down, autoIndent));
+			}
+		}
+
+		if (movingMultipleLines) {
+			if (newSelections.length > 1) {
+				if (selectionDirectionDown === this.down) {
+					newSelections.reverse();
+				}
+				editor.setSelections(newSelections);
+			}
+
+			editor.pushUndoStop();
+		} else {
+			editor.pushUndoStop();
+			editor.executeCommands(this.id, commands);
+			editor.pushUndoStop();
+		}
 	}
 }
 
