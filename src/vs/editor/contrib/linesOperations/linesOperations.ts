@@ -180,7 +180,7 @@ abstract class AbstractMoveLinesAction extends EditorAction {
 	}
 }
 
-class MoveLinesUpAction extends AbstractMoveLinesAction {
+export class MoveLinesUpAction extends AbstractMoveLinesAction {
 	constructor() {
 		super(false, {
 			id: 'editor.action.moveLinesUpAction',
@@ -203,7 +203,7 @@ class MoveLinesUpAction extends AbstractMoveLinesAction {
 	}
 }
 
-class MoveLinesDownAction extends AbstractMoveLinesAction {
+export class MoveLinesDownAction extends AbstractMoveLinesAction {
 	constructor() {
 		super(true, {
 			id: 'editor.action.moveLinesDownAction',
