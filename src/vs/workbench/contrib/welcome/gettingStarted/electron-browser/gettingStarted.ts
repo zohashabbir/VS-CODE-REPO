@@ -8,13 +8,13 @@ import { IStorageService, StorageScope } from 'vs/platform/storage/common/storag
 import { ITelemetryService, ITelemetryInfo } from 'vs/platform/telemetry/common/telemetry';
 import { IEnvironmentService } from 'vs/platform/environment/common/environment';
 import * as platform from 'vs/base/common/platform';
-import product from 'vs/platform/node/product';
+import product from 'vs/platform/product/node/product';
 
 export class GettingStarted implements IWorkbenchContribution {
 
 	private static readonly hideWelcomeSettingskey = 'workbench.hide.welcome';
 
-	private welcomePageURL: string;
+	private welcomePageURL?: string;
 	private appName: string;
 
 	constructor(

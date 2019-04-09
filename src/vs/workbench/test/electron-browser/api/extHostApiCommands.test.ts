@@ -15,15 +15,15 @@ import { IMarkerService } from 'vs/platform/markers/common/markers';
 import { ICommandService, CommandsRegistry } from 'vs/platform/commands/common/commands';
 import { IModelService } from 'vs/editor/common/services/modelService';
 import { ExtHostLanguageFeatures } from 'vs/workbench/api/node/extHostLanguageFeatures';
-import { MainThreadLanguageFeatures } from 'vs/workbench/api/electron-browser/mainThreadLanguageFeatures';
-import { IHeapService } from 'vs/workbench/api/electron-browser/mainThreadHeapService';
+import { MainThreadLanguageFeatures } from 'vs/workbench/api/browser/mainThreadLanguageFeatures';
+import { IHeapService, NullHeapService } from 'vs/workbench/services/heap/common/heap';
 import { ExtHostApiCommands } from 'vs/workbench/api/node/extHostApiCommands';
 import { ExtHostCommands } from 'vs/workbench/api/node/extHostCommands';
 import { ExtHostHeapService } from 'vs/workbench/api/node/extHostHeapService';
-import { MainThreadCommands } from 'vs/workbench/api/electron-browser/mainThreadCommands';
+import { MainThreadCommands } from 'vs/workbench/api/browser/mainThreadCommands';
 import { ExtHostDocuments } from 'vs/workbench/api/node/extHostDocuments';
 import { ExtHostDocumentsAndEditors } from 'vs/workbench/api/node/extHostDocumentsAndEditors';
-import { MainContext, ExtHostContext } from 'vs/workbench/api/node/extHost.protocol';
+import { MainContext, ExtHostContext } from 'vs/workbench/api/common/extHost.protocol';
 import { ExtHostDiagnostics } from 'vs/workbench/api/node/extHostDiagnostics';
 import * as vscode from 'vscode';
 import { IInstantiationService } from 'vs/platform/instantiation/common/instantiation';
@@ -31,6 +31,7 @@ import 'vs/workbench/contrib/search/browser/search.contribution';
 import { NullLogService } from 'vs/platform/log/common/log';
 import { ITextModel } from 'vs/editor/common/model';
 import { nullExtensionDescription } from 'vs/workbench/services/extensions/common/extensions';
+import { dispose } from 'vs/base/common/lifecycle';
 
 const defaultSelector = { scheme: 'far' };
 const model: ITextModel = EditorModel.createFromString(
@@ -66,12 +67,7 @@ suite('ExtHostLanguageFeatureCommands', function () {
 		{
 			let instantiationService = new TestInstantiationService();
 			rpcProtocol = new TestRPCProtocol();
-			instantiationService.stub(IHeapService, {
-				_serviceBrand: undefined,
-				trackObject(_obj: any) {
-					// nothing
-				}
-			});
+			instantiationService.stub(IHeapService, NullHeapService);
 			instantiationService.stub(ICommandService, {
 				_serviceBrand: undefined,
 				executeCommand(id: string, args: any): any {
@@ -86,15 +82,15 @@ suite('ExtHostLanguageFeatureCommands', function () {
 			instantiationService.stub(IModelService, <IModelService>{
 				_serviceBrand: IModelService,
 				getModel(): any { return model; },
-				createModel(): any { throw new Error(); },
-				updateModel(): any { throw new Error(); },
-				setMode(): any { throw new Error(); },
-				destroyModel(): any { throw new Error(); },
-				getModels(): any { throw new Error(); },
-				onModelAdded: undefined,
-				onModelModeChanged: undefined,
-				onModelRemoved: undefined,
-				getCreationOptions(): any { throw new Error(); }
+				createModel() { throw new Error(); },
+				updateModel() { throw new Error(); },
+				setMode() { throw new Error(); },
+				destroyModel() { throw new Error(); },
+				getModels() { throw new Error(); },
+				onModelAdded: undefined!,
+				onModelModeChanged: undefined!,
+				onModelRemoved: undefined!,
+				getCreationOptions() { throw new Error(); }
 			});
 			inst = instantiationService;
 		}
@@ -137,10 +133,8 @@ suite('ExtHostLanguageFeatureCommands', function () {
 		mainThread.dispose();
 	});
 
-	teardown(function () {
-		while (disposables.length) {
-			disposables.pop().dispose();
-		}
+	teardown(() => {
+		disposables = dispose(disposables);
 		return rpcProtocol.sync();
 	});
 
@@ -191,8 +185,8 @@ suite('ExtHostLanguageFeatureCommands', function () {
 	test('executeWorkspaceSymbolProvider should accept empty string, #39522', async function () {
 
 		disposables.push(extHost.registerWorkspaceSymbolProvider(nullExtensionDescription, {
-			provideWorkspaceSymbols(query) {
-				return [new types.SymbolInformation('hello', types.SymbolKind.Array, new types.Range(0, 0, 0, 0), URI.parse('foo:bar'))];
+			provideWorkspaceSymbols(query): vscode.SymbolInformation[] {
+				return [new types.SymbolInformation('hello', types.SymbolKind.Array, new types.Range(0, 0, 0, 0), URI.parse('foo:bar')) as vscode.SymbolInformation];
 			}
 		}));
 
@@ -567,7 +561,7 @@ suite('ExtHostLanguageFeatureCommands', function () {
 
 	test('Parameter Hints, back and forth', async () => {
 		disposables.push(extHost.registerSignatureHelpProvider(nullExtensionDescription, defaultSelector, new class implements vscode.SignatureHelpProvider {
-			provideSignatureHelp(_document, _position, _token, context: vscode.SignatureHelpContext): vscode.SignatureHelp {
+			provideSignatureHelp(_document: vscode.TextDocument, _position: vscode.Position, _token: vscode.CancellationToken, context: vscode.SignatureHelpContext): vscode.SignatureHelp {
 				return {
 					activeSignature: 0,
 					activeParameter: 1,
@@ -664,9 +658,9 @@ suite('ExtHostLanguageFeatureCommands', function () {
 
 				assert.equal(first.command!.title, 'Title');
 				assert.equal(first.command!.command, 'cmd');
-				assert.equal(first.command!.arguments[0], 1);
-				assert.equal(first.command!.arguments[1], true);
-				assert.equal(first.command!.arguments[2], complexArg);
+				assert.equal(first.command!.arguments![0], 1);
+				assert.equal(first.command!.arguments![1], true);
+				assert.equal(first.command!.arguments![2], complexArg);
 			});
 		});
 	});
@@ -800,10 +794,9 @@ suite('ExtHostLanguageFeatureCommands', function () {
 
 		disposables.push(extHost.registerSelectionRangeProvider(nullExtensionDescription, defaultSelector, <vscode.SelectionRangeProvider>{
 			provideSelectionRanges() {
-				return [[
-					new types.SelectionRange(new types.Range(0, 10, 0, 18), types.SelectionRangeKind.Empty),
-					new types.SelectionRange(new types.Range(0, 2, 0, 20), types.SelectionRangeKind.Empty)
-				]];
+				return [
+					new types.SelectionRange(new types.Range(0, 10, 0, 18), new types.SelectionRange(new types.Range(0, 2, 0, 20))),
+				];
 			}
 		}));
 

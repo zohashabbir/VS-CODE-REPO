@@ -19,7 +19,7 @@ import { IPreferencesService } from 'vs/workbench/services/preferences/common/pr
 export class OpenRawDefaultSettingsAction extends Action {
 
 	static readonly ID = 'workbench.action.openRawDefaultSettings';
-	static readonly LABEL = nls.localize('openRawDefaultSettings', "Open Raw Default Settings");
+	static readonly LABEL = nls.localize('openRawDefaultSettings', "Open Default Settings (JSON)");
 
 	constructor(
 		id: string,
@@ -85,6 +85,23 @@ export class OpenGlobalSettingsAction extends Action {
 
 	run(event?: any): Promise<any> {
 		return this.preferencesService.openGlobalSettings();
+	}
+}
+
+export class OpenRemoteSettingsAction extends Action {
+
+	static readonly ID = 'workbench.action.openRemoteSettings';
+
+	constructor(
+		id: string,
+		label: string,
+		@IPreferencesService private readonly preferencesService: IPreferencesService,
+	) {
+		super(id, label);
+	}
+
+	run(event?: any): Promise<any> {
+		return this.preferencesService.openRemoteSettings();
 	}
 }
 
@@ -239,7 +256,7 @@ export class ConfigureLanguageBasedSettingsAction extends Action {
 		const picks: IQuickPickItem[] = languages.sort().map((lang, index) => {
 			const description: string = nls.localize('languageDescriptionConfigured', "({0})", this.modeService.getModeIdForLanguageName(lang.toLowerCase()));
 			// construct a fake resource to be able to show nice icons if any
-			let fakeResource: URI;
+			let fakeResource: URI | undefined;
 			const extensions = this.modeService.getExtensions(lang);
 			if (extensions && extensions.length) {
 				fakeResource = URI.file(extensions[0]);
@@ -260,7 +277,9 @@ export class ConfigureLanguageBasedSettingsAction extends Action {
 			.then(pick => {
 				if (pick) {
 					const modeId = this.modeService.getModeIdForLanguageName(pick.label.toLowerCase());
-					return this.preferencesService.configureSettingsForLanguage(modeId);
+					if (typeof modeId === 'string') {
+						return this.preferencesService.configureSettingsForLanguage(modeId);
+					}
 				}
 				return undefined;
 			});

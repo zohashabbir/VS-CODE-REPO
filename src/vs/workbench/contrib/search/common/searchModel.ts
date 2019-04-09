@@ -26,6 +26,7 @@ import { overviewRulerFindMatchForeground } from 'vs/platform/theme/common/color
 import { themeColorFromId } from 'vs/platform/theme/common/themeService';
 import { IReplaceService } from 'vs/workbench/contrib/search/common/replace';
 import { editorMatchesToTextSearchResults } from 'vs/workbench/services/search/common/searchHelpers';
+import { withNullAsUndefined } from 'vs/base/common/types';
 
 export class Match {
 
@@ -79,6 +80,7 @@ export class Match {
 			after = this._oneLinePreviewText.substring(this._rangeInPreviewText.endColumn - 1);
 
 		before = lcut(before, 26);
+		before = before.trimLeft();
 
 		let charsRemaining = Match.MAX_PREVIEW_CHARS - before.length;
 		inside = inside.substr(0, charsRemaining);
@@ -388,7 +390,7 @@ export class FileMatch extends Disposable {
 }
 
 export interface IChangeEvent {
-	elements: (FileMatch | FolderMatch | SearchResult | null)[];
+	elements: (FileMatch | FolderMatch | SearchResult)[];
 	added?: boolean;
 	removed?: boolean;
 }
@@ -439,7 +441,7 @@ export class BaseFolderMatch extends Disposable {
 	}
 
 	name(): string {
-		return getBaseLabel(this.resource() || undefined) || '';
+		return getBaseLabel(withNullAsUndefined(this.resource())) || '';
 	}
 
 	parent(): SearchResult {
@@ -598,7 +600,7 @@ export class FolderMatch extends BaseFolderMatch {
  * and their sort order is undefined.
  */
 export function searchMatchComparer(elementA: RenderableMatch, elementB: RenderableMatch): number {
-	if (elementA instanceof FolderMatch && elementB instanceof FolderMatch) {
+	if (elementA instanceof BaseFolderMatch && elementB instanceof BaseFolderMatch) {
 		return elementA.index() - elementB.index();
 	}
 

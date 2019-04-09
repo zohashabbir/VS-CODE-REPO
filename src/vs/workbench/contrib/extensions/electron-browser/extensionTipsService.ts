@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { localize } from 'vs/nls';
-import * as extpath from 'vs/base/common/extpath';
+import { join } from 'vs/base/common/path';
 import { forEach } from 'vs/base/common/collections';
 import { IDisposable, dispose, Disposable } from 'vs/base/common/lifecycle';
 import { match } from 'vs/base/common/glob';
@@ -16,13 +16,13 @@ import {
 import { IModelService } from 'vs/editor/common/services/modelService';
 import { ITextModel } from 'vs/editor/common/model';
 import { IStorageService, StorageScope } from 'vs/platform/storage/common/storage';
-import product from 'vs/platform/node/product';
+import product from 'vs/platform/product/node/product';
 import { IInstantiationService } from 'vs/platform/instantiation/common/instantiation';
 import { ShowRecommendedExtensionsAction, InstallWorkspaceRecommendedExtensionsAction, InstallRecommendedExtensionAction } from 'vs/workbench/contrib/extensions/electron-browser/extensionsActions';
 import Severity from 'vs/base/common/severity';
 import { IWorkspaceContextService, IWorkspaceFolder, IWorkspace, IWorkspaceFoldersChangeEvent, WorkbenchState } from 'vs/platform/workspace/common/workspace';
 import { IFileService } from 'vs/platform/files/common/files';
-import { IExtensionsConfiguration, ConfigurationKey, ShowRecommendationsOnlyOnDemandKey, IExtensionsViewlet, IExtensionsWorkbenchService } from 'vs/workbench/contrib/extensions/common/extensions';
+import { IExtensionsConfiguration, ConfigurationKey, ShowRecommendationsOnlyOnDemandKey, IExtensionsViewlet, IExtensionsWorkbenchService, EXTENSIONS_CONFIG } from 'vs/workbench/contrib/extensions/common/extensions';
 import { IConfigurationService, ConfigurationTarget } from 'vs/platform/configuration/common/configuration';
 import { ITelemetryService } from 'vs/platform/telemetry/common/telemetry';
 import * as pfs from 'vs/base/node/pfs';
@@ -43,7 +43,6 @@ import { URI } from 'vs/base/common/uri';
 import { areSameExtensions } from 'vs/platform/extensionManagement/common/extensionManagementUtil';
 import { IExperimentService, ExperimentActionType, ExperimentState } from 'vs/workbench/contrib/experiments/node/experimentService';
 import { CancellationToken } from 'vs/base/common/cancellation';
-import { getKeywordsForExtension } from 'vs/workbench/contrib/extensions/electron-browser/extensionsUtils';
 import { ExtensionType } from 'vs/platform/extensions/common/extensions';
 import { extname } from 'vs/base/common/resources';
 
@@ -84,7 +83,7 @@ export class ExtensionTipsService extends Disposable implements IExtensionTipsSe
 	private _workspaceIgnoredRecommendations: string[] = [];
 	private _extensionsRecommendationsUrl: string;
 	private _disposables: IDisposable[] = [];
-	public loadWorkspaceConfigPromise: Promise<any>;
+	public loadWorkspaceConfigPromise: Promise<void>;
 	private proactiveRecommendationsFetched: boolean = false;
 
 	private readonly _onRecommendationChange = new Emitter<RecommendationChangeNotification>();
@@ -334,9 +333,9 @@ export class ExtensionTipsService extends Disposable implements IExtensionTipsSe
 	 * Parse the extensions.json files for given workspace folder and return the recommendations
 	 */
 	private resolveWorkspaceFolderExtensionConfig(workspaceFolder: IWorkspaceFolder): Promise<IExtensionsConfigContent | null> {
-		const extensionsJsonUri = workspaceFolder.toResource(extpath.join('.vscode', 'extensions.json'));
+		const extensionsJsonUri = workspaceFolder.toResource(EXTENSIONS_CONFIG);
 
-		return Promise.resolve(this.fileService.resolveFile(extensionsJsonUri)
+		return Promise.resolve(this.fileService.resolve(extensionsJsonUri)
 			.then(() => this.fileService.resolveContent(extensionsJsonUri))
 			.then(content => <IExtensionsConfigContent>json.parse(content.value), err => null));
 	}
@@ -374,7 +373,7 @@ export class ExtensionTipsService extends Disposable implements IExtensionTipsSe
 
 		if (filteredWanted.length) {
 			try {
-				let validRecommendations = (await this._galleryService.query({ names: filteredWanted, pageSize: filteredWanted.length })).firstPage
+				let validRecommendations = (await this._galleryService.query({ names: filteredWanted, pageSize: filteredWanted.length }, CancellationToken.None)).firstPage
 					.map(extension => extension.identifier.id.toLowerCase());
 
 				if (validRecommendations.length !== filteredWanted.length) {
@@ -759,8 +758,9 @@ export class ExtensionTipsService extends Disposable implements IExtensionTipsSe
 					return;
 				}
 
-				const keywords = getKeywordsForExtension(fileExtension);
-				this._galleryService.query({ text: `tag:"__ext_${fileExtension}" ${keywords.map(tag => `tag:"${tag}"`)}` }).then(pager => {
+				const lookup = product.extensionKeywords || {};
+				const keywords = lookup[fileExtension] || [];
+				this._galleryService.query({ text: `tag:"__ext_${fileExtension}" ${keywords.map(tag => `tag:"${tag}"`)}` }, CancellationToken.None).then(pager => {
 					if (!pager || !pager.firstPage || !pager.firstPage.length) {
 						return;
 					}
@@ -867,7 +867,7 @@ export class ExtensionTipsService extends Disposable implements IExtensionTipsSe
 	/**
 	 * If user has any of the tools listed in product.exeBasedExtensionTips, fetch corresponding recommendations
 	 */
-	private fetchExecutableRecommendations(): Promise<any> {
+	private fetchExecutableRecommendations(): Promise<void> {
 		const homeDir = os.homedir();
 		let foundExecutables: Set<string> = new Set<string>();
 
@@ -885,7 +885,7 @@ export class ExtensionTipsService extends Disposable implements IExtensionTipsSe
 			});
 		};
 
-		let promises: Promise<any>[] = [];
+		let promises: Promise<void>[] = [];
 		// Loop through recommended extensions
 		forEach(product.exeBasedExtensionTips, entry => {
 			if (typeof entry.value !== 'object' || !Array.isArray(entry.value['recommendations'])) {
@@ -904,12 +904,12 @@ export class ExtensionTipsService extends Disposable implements IExtensionTipsSe
 					.replace('%APPDATA%', process.env['APPDATA']!);
 				promises.push(findExecutable(exeName, windowsPath));
 			} else {
-				promises.push(findExecutable(exeName, extpath.join('/usr/local/bin', exeName)));
-				promises.push(findExecutable(exeName, extpath.join(homeDir, exeName)));
+				promises.push(findExecutable(exeName, join('/usr/local/bin', exeName)));
+				promises.push(findExecutable(exeName, join(homeDir, exeName)));
 			}
 		});
 
-		return Promise.all(promises);
+		return Promise.all(promises).then(() => undefined);
 	}
 
 	/**
@@ -1008,7 +1008,7 @@ export class ExtensionTipsService extends Disposable implements IExtensionTipsSe
 			(experiments || []).forEach(experiment => {
 				const action = experiment.action;
 				if (action && experiment.state === ExperimentState.Run && action.properties && Array.isArray(action.properties.recommendations) && action.properties.recommendationReason) {
-					action.properties.recommendations.forEach(id => {
+					action.properties.recommendations.forEach((id: string) => {
 						this._experimentalRecommendations[id] = action.properties.recommendationReason;
 					});
 				}

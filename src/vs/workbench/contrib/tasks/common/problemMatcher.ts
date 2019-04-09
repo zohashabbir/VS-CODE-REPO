@@ -8,7 +8,7 @@ import { localize } from 'vs/nls';
 import * as Objects from 'vs/base/common/objects';
 import * as Strings from 'vs/base/common/strings';
 import * as Assert from 'vs/base/common/assert';
-import * as Extpath from 'vs/base/common/extpath';
+import { join } from 'vs/base/common/path';
 import * as Types from 'vs/base/common/types';
 import * as UUID from 'vs/base/common/uuid';
 import * as Platform from 'vs/base/common/platform';
@@ -188,7 +188,7 @@ export function getResource(filename: string, matcher: ProblemMatcher): URI {
 	if (kind === FileLocationKind.Absolute) {
 		fullPath = filename;
 	} else if ((kind === FileLocationKind.Relative) && matcher.filePrefix) {
-		fullPath = Extpath.join(matcher.filePrefix, filename);
+		fullPath = join(matcher.filePrefix, filename);
 	}
 	if (fullPath === undefined) {
 		throw new Error('FileLocationKind is not actionable. Does the matcher have a filePrefix? This should never happen.');
@@ -841,7 +841,9 @@ export class ProblemPatternParser extends Parser {
 
 	private createSingleProblemPattern(value: Config.CheckedProblemPattern): ProblemPattern | null {
 		let result = this.doCreateSingleProblemPattern(value, true);
-		if (result.kind === undefined) {
+		if (result === undefined) {
+			return null;
+		} else if (result.kind === undefined) {
 			result.kind = ProblemLocationKind.Location;
 		}
 		return this.validateProblemPattern([result]) ? result : null;
@@ -864,6 +866,9 @@ export class ProblemPatternParser extends Parser {
 		let result: MultiLineProblemPattern = [];
 		for (let i = 0; i < values.length; i++) {
 			let pattern = this.doCreateSingleProblemPattern(values[i], false);
+			if (pattern === undefined) {
+				return null;
+			}
 			if (i < values.length - 1) {
 				if (!Types.isUndefined(pattern.loop) && pattern.loop) {
 					pattern.loop = false;
@@ -878,10 +883,10 @@ export class ProblemPatternParser extends Parser {
 		return this.validateProblemPattern(result) ? result : null;
 	}
 
-	private doCreateSingleProblemPattern(value: Config.CheckedProblemPattern, setDefaults: boolean): ProblemPattern {
+	private doCreateSingleProblemPattern(value: Config.CheckedProblemPattern, setDefaults: boolean): ProblemPattern | undefined {
 		const regexp = this.createRegularExpression(value.regexp);
 		if (regexp === undefined) {
-			throw new Error('Invalid regular expression');
+			return undefined;
 		}
 		let result: ProblemPattern = { regexp };
 		if (value.kind) {
@@ -1093,8 +1098,7 @@ const problemPatternExtPoint = ExtensionsRegistry.registerExtensionPoint<Config.
 				Schemas.NamedMultiLineProblemPattern
 			]
 		}
-	},
-	isDynamic: true
+	}
 });
 
 export interface IProblemPatternRegistry {
@@ -1674,15 +1678,14 @@ const problemMatchersExtPoint = ExtensionsRegistry.registerExtensionPoint<Config
 		description: localize('ProblemMatcherExtPoint', 'Contributes problem matchers'),
 		type: 'array',
 		items: Schemas.NamedProblemMatcher
-	},
-	isDynamic: true
+	}
 });
 
 export interface IProblemMatcherRegistry {
 	onReady(): Promise<void>;
 	get(name: string): NamedProblemMatcher;
 	keys(): string[];
-	readonly onMatcherChanged;
+	readonly onMatcherChanged: Event<void>;
 }
 
 class ProblemMatcherRegistryImpl implements IProblemMatcherRegistry {

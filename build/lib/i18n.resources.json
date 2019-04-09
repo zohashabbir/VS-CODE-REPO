@@ -39,6 +39,14 @@
 			"project": "vscode-workbench"
 		},
 		{
+			"name": "vs/workbench/contrib/codeinset",
+			"project": "vscode-workbench"
+		},
+		{
+			"name": "vs/workbench/contrib/callHierarchy",
+			"project": "vscode-workbench"
+		},
+		{
 			"name": "vs/workbench/contrib/comments",
 			"project": "vscode-workbench"
 		},
@@ -51,11 +59,11 @@
 			"project": "vscode-workbench"
 		},
 		{
-			"name": "vs/workbench/contrib/execution",
+			"name": "vs/workbench/contrib/extensions",
 			"project": "vscode-workbench"
 		},
 		{
-			"name": "vs/workbench/contrib/extensions",
+			"name": "vs/workbench/contrib/externalTerminal",
 			"project": "vscode-workbench"
 		},
 		{
@@ -212,6 +220,10 @@
 		},
 		{
 			"name": "vs/workbench/services/files",
+			"project": "vscode-workbench"
+		},
+		{
+			"name": "vs/workbench/services/files2",
 			"project": "vscode-workbench"
 		},
 		{

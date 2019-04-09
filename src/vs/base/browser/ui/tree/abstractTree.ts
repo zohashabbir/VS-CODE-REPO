@@ -14,7 +14,7 @@ import { KeyCode } from 'vs/base/common/keyCodes';
 import { ITreeModel, ITreeNode, ITreeRenderer, ITreeEvent, ITreeMouseEvent, ITreeContextMenuEvent, ITreeFilter, ITreeNavigator, ICollapseStateChangeEvent, ITreeDragAndDrop, TreeDragOverBubble, TreeVisibility, TreeFilterResult, ITreeModelSpliceEvent } from 'vs/base/browser/ui/tree/tree';
 import { ISpliceable } from 'vs/base/common/sequence';
 import { IDragAndDropData, StaticDND, DragAndDropData } from 'vs/base/browser/dnd';
-import { range } from 'vs/base/common/arrays';
+import { range, equals, distinctES6 } from 'vs/base/common/arrays';
 import { ElementsDragAndDropData } from 'vs/base/browser/ui/list/listView';
 import { domEvent } from 'vs/base/browser/event';
 import { fuzzyScore, FuzzyScore } from 'vs/base/common/filters';
@@ -24,6 +24,7 @@ import { disposableTimeout } from 'vs/base/common/async';
 import { isMacintosh } from 'vs/base/common/platform';
 import { values } from 'vs/base/common/map';
 import { clamp } from 'vs/base/common/numbers';
+import { ScrollEvent } from 'vs/base/common/scrollable';
 
 function asTreeDragAndDropData<T, TFilterData>(data: IDragAndDropData): IDragAndDropData {
 	if (data instanceof ElementsDragAndDropData) {
@@ -177,6 +178,12 @@ export class ComposedTreeDelegate<T, N extends { element: T }> implements IListV
 	hasDynamicHeight(element: N): boolean {
 		return !!this.delegate.hasDynamicHeight && this.delegate.hasDynamicHeight(element.element);
 	}
+
+	setDynamicHeight(element: N, height: number): void {
+		if (this.delegate.setDynamicHeight) {
+			this.delegate.setDynamicHeight(element.element, height);
+		}
+	}
 }
 
 interface ITreeListTemplateData<T> {
@@ -196,7 +203,7 @@ class TreeRenderer<T, TFilterData, TTemplateData> implements IListRenderer<ITree
 	readonly templateId: string;
 	private renderedElements = new Map<T, ITreeNode<T, TFilterData>>();
 	private renderedNodes = new Map<ITreeNode<T, TFilterData>, ITreeListTemplateData<TTemplateData>>();
-	private indent: number;
+	private indent: number = TreeRenderer.DefaultIndent;
 	private disposables: IDisposable[] = [];
 
 	constructor(
@@ -215,7 +222,9 @@ class TreeRenderer<T, TFilterData, TTemplateData> implements IListRenderer<ITree
 	}
 
 	updateOptions(options: ITreeRendererOptions = {}): void {
-		this.indent = typeof options.indent === 'number' ? clamp(options.indent, 0, 20) : TreeRenderer.DefaultIndent;
+		if (typeof options.indent !== 'undefined') {
+			this.indent = clamp(options.indent, 0, 40);
+		}
 
 		this.renderedNodes.forEach((templateData, node) => {
 			templateData.twistie.style.marginLeft = `${node.depth * this.indent}px`;
@@ -231,23 +240,28 @@ class TreeRenderer<T, TFilterData, TTemplateData> implements IListRenderer<ITree
 		return { container, twistie, templateData };
 	}
 
-	renderElement(node: ITreeNode<T, TFilterData>, index: number, templateData: ITreeListTemplateData<TTemplateData>): void {
-		this.renderedNodes.set(node, templateData);
-		this.renderedElements.set(node.element, node);
+	renderElement(node: ITreeNode<T, TFilterData>, index: number, templateData: ITreeListTemplateData<TTemplateData>, dynamicHeightProbing?: boolean): void {
+		if (!dynamicHeightProbing) {
+			this.renderedNodes.set(node, templateData);
+			this.renderedElements.set(node.element, node);
+		}
 
 		const indent = TreeRenderer.DefaultIndent + (node.depth - 1) * this.indent;
 		templateData.twistie.style.marginLeft = `${indent}px`;
 		this.update(node, templateData);
 
-		this.renderer.renderElement(node, index, templateData.templateData);
+		this.renderer.renderElement(node, index, templateData.templateData, dynamicHeightProbing);
 	}
 
-	disposeElement(node: ITreeNode<T, TFilterData>, index: number, templateData: ITreeListTemplateData<TTemplateData>): void {
+	disposeElement(node: ITreeNode<T, TFilterData>, index: number, templateData: ITreeListTemplateData<TTemplateData>, dynamicHeightProbing?: boolean): void {
 		if (this.renderer.disposeElement) {
-			this.renderer.disposeElement(node, index, templateData.templateData);
+			this.renderer.disposeElement(node, index, templateData.templateData, dynamicHeightProbing);
 		}
-		this.renderedNodes.delete(node);
-		this.renderedElements.delete(node.element);
+
+		if (!dynamicHeightProbing) {
+			this.renderedNodes.delete(node);
+			this.renderedElements.delete(node.element);
+		}
 	}
 
 	disposeTemplate(templateData: ITreeListTemplateData<TTemplateData>): void {
@@ -395,6 +409,12 @@ class TypeFilterController<T, TFilterData> implements IDisposable {
 	private _filterOnType: boolean;
 	get filterOnType(): boolean { return this._filterOnType; }
 
+	private _empty: boolean;
+	get empty(): boolean { return this._empty; }
+
+	private _onDidChangeEmptyState = new Emitter<boolean>();
+	readonly onDidChangeEmptyState: Event<boolean> = Event.latch(this._onDidChangeEmptyState.event);
+
 	private positionClassName = 'ne';
 	private domNode: HTMLElement;
 	private messageDomNode: HTMLElement;
@@ -403,8 +423,11 @@ class TypeFilterController<T, TFilterData> implements IDisposable {
 	private clearDomNode: HTMLElement;
 	private keyboardNavigationEventFilter?: IKeyboardNavigationEventFilter;
 
-	private automaticKeyboardNavigation: boolean;
+	private automaticKeyboardNavigation = true;
 	private triggered = false;
+
+	private _onDidChangePattern = new Emitter<string>();
+	readonly onDidChangePattern = this._onDidChangePattern.event;
 
 	private enabledDisposables: IDisposable[] = [];
 	private disposables: IDisposable[] = [];
@@ -455,7 +478,10 @@ class TypeFilterController<T, TFilterData> implements IDisposable {
 			this.filterOnTypeDomNode.checked = this._filterOnType;
 		}
 
-		this.automaticKeyboardNavigation = typeof options.automaticKeyboardNavigation === 'undefined' ? true : options.automaticKeyboardNavigation;
+		if (typeof options.automaticKeyboardNavigation !== 'undefined') {
+			this.automaticKeyboardNavigation = options.automaticKeyboardNavigation;
+		}
+
 		this.tree.refilter();
 		this.render();
 
@@ -480,10 +506,10 @@ class TypeFilterController<T, TFilterData> implements IDisposable {
 		const isPrintableCharEvent = this.keyboardNavigationLabelProvider.mightProducePrintableCharacter ? (e: IKeyboardEvent) => this.keyboardNavigationLabelProvider.mightProducePrintableCharacter!(e) : (e: IKeyboardEvent) => mightProducePrintableCharacter(e);
 		const onKeyDown = Event.chain(domEvent(this.view.getHTMLElement(), 'keydown'))
 			.filter(e => !isInputElement(e.target as HTMLElement) || e.target === this.filterOnTypeDomNode)
+			.map(e => new StandardKeyboardEvent(e))
 			.filter(this.keyboardNavigationEventFilter || (() => true))
 			.filter(() => this.automaticKeyboardNavigation || this.triggered)
-			.map(e => new StandardKeyboardEvent(e))
-			.filter(e => isPrintableCharEvent(e) || ((this._pattern.length > 0 || this.triggered) && ((e.keyCode === KeyCode.Escape || e.keyCode === KeyCode.Backspace) && !e.altKey && !e.ctrlKey && !e.metaKey) || (e.keyCode === KeyCode.Backspace && (isMacintosh ? e.altKey : e.ctrlKey))))
+			.filter(e => isPrintableCharEvent(e) || ((this.pattern.length > 0 || this.triggered) && ((e.keyCode === KeyCode.Escape || e.keyCode === KeyCode.Backspace) && !e.altKey && !e.ctrlKey && !e.metaKey) || (e.keyCode === KeyCode.Backspace && (isMacintosh ? (e.altKey && !e.metaKey) : e.ctrlKey) && !e.shiftKey)))
 			.forEach(e => { e.stopPropagation(); e.preventDefault(); })
 			.event;
 
@@ -535,6 +561,8 @@ class TypeFilterController<T, TFilterData> implements IDisposable {
 		}
 
 		this._pattern = pattern;
+		this._onDidChangePattern.fire(pattern);
+
 		this.filter.pattern = pattern;
 		this.tree.refilter();
 
@@ -582,6 +610,8 @@ class TypeFilterController<T, TFilterData> implements IDisposable {
 		};
 
 		const onDragOver = (event: DragEvent) => {
+			event.preventDefault(); // needed so that the drop event fires (https://stackoverflow.com/questions/21339924/drop-event-not-firing-in-chrome)
+
 			const x = event.screenX - left;
 			if (event.dataTransfer) {
 				event.dataTransfer.dropEffect = 'none';
@@ -648,13 +678,17 @@ class TypeFilterController<T, TFilterData> implements IDisposable {
 
 		if (this.pattern && this.tree.options.filterOnType && noMatches) {
 			this.messageDomNode.textContent = localize('empty', "No elements found");
+			this._empty = true;
 		} else {
 			this.messageDomNode.innerHTML = '';
+			this._empty = false;
 		}
 
 		toggleClass(this.domNode, 'no-matches', noMatches);
 		this.domNode.title = localize('found', "Matched {0} out of {1} elements", this.filter.matchCount, this.filter.totalCount);
 		this.labelDomNode.textContent = this.pattern.length > 16 ? '…' + this.pattern.substr(this.pattern.length - 16) : this.pattern;
+
+		this._onDidChangeEmptyState.fire(this._empty);
 	}
 
 	shouldAllowFocus(node: ITreeNode<T, TFilterData>): boolean {
@@ -671,6 +705,7 @@ class TypeFilterController<T, TFilterData> implements IDisposable {
 
 	dispose() {
 		this.disable();
+		this._onDidChangePattern.dispose();
 		this.disposables = dispose(this.disposables);
 	}
 }
@@ -702,7 +737,7 @@ function asTreeContextMenuEvent<T>(event: IListContextMenuEvent<ITreeNode<T, any
 }
 
 export interface IKeyboardNavigationEventFilter {
-	(e: KeyboardEvent): boolean;
+	(e: StandardKeyboardEvent): boolean;
 }
 
 export interface IAbstractTreeOptionsUpdate extends ITreeRendererOptions {
@@ -750,6 +785,10 @@ class Trait<T> {
 	constructor(private identityProvider?: IIdentityProvider<T>) { }
 
 	set(nodes: ITreeNode<T, any>[], browserEvent?: UIEvent): void {
+		if (equals(this.nodes, nodes)) {
+			return;
+		}
+
 		this.nodes = [...nodes];
 		this.elements = undefined;
 		this._nodeSet = undefined;
@@ -773,24 +812,38 @@ class Trait<T> {
 	onDidModelSplice({ insertedNodes, deletedNodes }: ITreeModelSpliceEvent<T, any>): void {
 		if (!this.identityProvider) {
 			const set = this.createNodeSet();
-			const visit = node => set.delete(node);
+			const visit = (node: ITreeNode<T, any>) => set.delete(node);
 			deletedNodes.forEach(node => dfs(node, visit));
 			this.set(values(set));
 			return;
 		}
 
-		const identityProvider = this.identityProvider;
-		const nodesByIdentity = new Map<string, ITreeNode<T, any>>();
-		this.nodes.forEach(node => nodesByIdentity.set(identityProvider.getId(node.element).toString(), node));
+		const deletedNodesIdSet = new Set<string>();
+		const deletedNodesVisitor = (node: ITreeNode<T, any>) => deletedNodesIdSet.add(this.identityProvider!.getId(node.element).toString());
+		deletedNodes.forEach(node => dfs(node, deletedNodesVisitor));
 
-		const toDeleteByIdentity = new Map<string, ITreeNode<T, any>>();
-		const toRemoveSetter = node => toDeleteByIdentity.set(identityProvider.getId(node.element).toString(), node);
-		const toRemoveDeleter = node => toDeleteByIdentity.delete(identityProvider.getId(node.element).toString());
-		deletedNodes.forEach(node => dfs(node, toRemoveSetter));
-		insertedNodes.forEach(node => dfs(node, toRemoveDeleter));
+		const insertedNodesMap = new Map<string, ITreeNode<T, any>>();
+		const insertedNodesVisitor = (node: ITreeNode<T, any>) => insertedNodesMap.set(this.identityProvider!.getId(node.element).toString(), node);
+		insertedNodes.forEach(node => dfs(node, insertedNodesVisitor));
 
-		toDeleteByIdentity.forEach((_, id) => nodesByIdentity.delete(id));
-		this.set(values(nodesByIdentity));
+		const nodes: ITreeNode<T, any>[] = [];
+
+		for (const node of this.nodes) {
+			const id = this.identityProvider.getId(node.element).toString();
+			const wasDeleted = deletedNodesIdSet.has(id);
+
+			if (!wasDeleted) {
+				nodes.push(node);
+			} else {
+				const insertedNode = insertedNodesMap.get(id);
+
+				if (insertedNode) {
+					nodes.push(insertedNode);
+				}
+			}
+		}
+
+		this.set(nodes);
 	}
 
 	private createNodeSet(): Set<ITreeNode<T, any>> {
@@ -892,7 +945,7 @@ class TreeNodeList<T, TFilterData, TRef> extends List<ITreeNode<T, TFilterData>>
 		const additionalSelection: number[] = [];
 
 		elements.forEach((node, index) => {
-			if (this.selectionTrait.has(node)) {
+			if (this.focusTrait.has(node)) {
 				additionalFocus.push(start + index);
 			}
 
@@ -902,11 +955,11 @@ class TreeNodeList<T, TFilterData, TRef> extends List<ITreeNode<T, TFilterData>>
 		});
 
 		if (additionalFocus.length > 0) {
-			super.setFocus([...super.getFocus(), ...additionalFocus]);
+			super.setFocus(distinctES6([...super.getFocus(), ...additionalFocus]));
 		}
 
 		if (additionalSelection.length > 0) {
-			super.setSelection([...super.getSelection(), ...additionalSelection]);
+			super.setSelection(distinctES6([...super.getSelection(), ...additionalSelection]));
 		}
 	}
 
@@ -929,7 +982,7 @@ class TreeNodeList<T, TFilterData, TRef> extends List<ITreeNode<T, TFilterData>>
 
 export abstract class AbstractTree<T, TFilterData, TRef> implements IDisposable {
 
-	private view: TreeNodeList<T, TFilterData, TRef>;
+	protected view: TreeNodeList<T, TFilterData, TRef>;
 	private renderers: TreeRenderer<T, TFilterData, any>[];
 	protected model: ITreeModel<T, TFilterData, TRef>;
 	private focus: Trait<T>;
@@ -939,7 +992,7 @@ export abstract class AbstractTree<T, TFilterData, TRef> implements IDisposable 
 	private focusNavigationFilter: ((node: ITreeNode<T, TFilterData>) => boolean) | undefined;
 	protected disposables: IDisposable[] = [];
 
-	get onDidScroll(): Event<void> { return this.view.onDidScroll; }
+	get onDidScroll(): Event<ScrollEvent> { return this.view.onDidScroll; }
 
 	get onDidChangeFocus(): Event<ITreeEvent<T>> { return this.eventBufferer.wrapEvent(this.focus.onDidChange); }
 	get onDidChangeSelection(): Event<ITreeEvent<T>> { return this.eventBufferer.wrapEvent(this.selection.onDidChange); }
@@ -963,10 +1016,14 @@ export abstract class AbstractTree<T, TFilterData, TRef> implements IDisposable 
 	readonly onWillRefilter: Event<void> = this._onWillRefilter.event;
 
 	get filterOnType(): boolean { return !!this._options.filterOnType; }
+	get onDidChangeTypeFilterPattern(): Event<string> { return this.typeFilterController ? this.typeFilterController.onDidChangePattern : Event.None; }
 
 	// Options TODO@joao expose options only, not Optional<>
 	get openOnSingleClick(): boolean { return typeof this._options.openOnSingleClick === 'undefined' ? true : this._options.openOnSingleClick; }
 	get expandOnlyOnTwistieClick(): boolean | ((e: T) => boolean) { return typeof this._options.expandOnlyOnTwistieClick === 'undefined' ? false : this._options.expandOnlyOnTwistieClick; }
+
+	private _onDidUpdateOptions = new Emitter<IAbstractTreeOptions<T, TFilterData>>();
+	readonly onDidUpdateOptions: Event<IAbstractTreeOptions<T, TFilterData>> = this._onDidUpdateOptions.event;
 
 	get onDidDispose(): Event<void> { return this.view.onDidDispose; }
 
@@ -985,7 +1042,7 @@ export abstract class AbstractTree<T, TFilterData, TRef> implements IDisposable 
 		let filter: TypeFilter<T> | undefined;
 
 		if (_options.keyboardNavigationLabelProvider) {
-			filter = new TypeFilter(this, _options.keyboardNavigationLabelProvider, _options.filter as ITreeFilter<T, FuzzyScore>);
+			filter = new TypeFilter(this, _options.keyboardNavigationLabelProvider, _options.filter as any as ITreeFilter<T, FuzzyScore>);
 			_options = { ..._options, filter: filter as ITreeFilter<T, TFilterData> }; // TODO need typescript help here
 			this.disposables.push(filter);
 		}
@@ -1026,11 +1083,16 @@ export abstract class AbstractTree<T, TFilterData, TRef> implements IDisposable 
 			renderer.updateOptions(optionsUpdate);
 		}
 
-		this.view.updateOptions({ enableKeyboardNavigation: this._options.simpleKeyboardNavigation });
+		this.view.updateOptions({
+			enableKeyboardNavigation: this._options.simpleKeyboardNavigation,
+			automaticKeyboardNavigation: this._options.automaticKeyboardNavigation
+		});
 
 		if (this.typeFilterController) {
 			this.typeFilterController.updateOptions(this._options);
 		}
+
+		this._onDidUpdateOptions.fire(this._options);
 	}
 
 	get options(): IAbstractTreeOptions<T, TFilterData> {
@@ -1054,11 +1116,21 @@ export abstract class AbstractTree<T, TFilterData, TRef> implements IDisposable 
 	}
 
 	get contentHeight(): number {
+		if (this.typeFilterController && this.typeFilterController.filterOnType && this.typeFilterController.empty) {
+			return 100;
+		}
+
 		return this.view.contentHeight;
 	}
 
 	get onDidChangeContentHeight(): Event<number> {
-		return this.view.onDidChangeContentHeight;
+		let result = this.view.onDidChangeContentHeight;
+
+		if (this.typeFilterController) {
+			result = Event.any(result, Event.map(this.typeFilterController.onDidChangeEmptyState, () => this.contentHeight));
+		}
+
+		return result;
 	}
 
 	get scrollTop(): number {
@@ -1075,6 +1147,18 @@ export abstract class AbstractTree<T, TFilterData, TRef> implements IDisposable 
 
 	get renderHeight(): number {
 		return this.view.renderHeight;
+	}
+
+	get firstVisibleElement(): T {
+		const index = this.view.firstVisibleIndex;
+		const node = this.view.element(index);
+		return node.element;
+	}
+
+	get lastVisibleElement(): T {
+		const index = this.view.lastVisibleIndex;
+		const node = this.view.element(index);
+		return node.element;
 	}
 
 	domFocus(): void {
@@ -1138,11 +1222,11 @@ export abstract class AbstractTree<T, TFilterData, TRef> implements IDisposable 
 	}
 
 	toggleKeyboardNavigation(): void {
-		if (!this.typeFilterController) {
-			return;
-		}
+		this.view.toggleKeyboardNavigation();
 
-		this.typeFilterController.toggle();
+		if (this.typeFilterController) {
+			this.typeFilterController.toggle();
+		}
 	}
 
 	refilter(): void {
@@ -1198,12 +1282,14 @@ export abstract class AbstractTree<T, TFilterData, TRef> implements IDisposable 
 		return this.focus.get();
 	}
 
-	open(elements: TRef[]): void {
+	open(elements: TRef[], browserEvent?: UIEvent): void {
 		const indexes = elements.map(e => this.model.getListIndex(e));
-		this.view.open(indexes);
+		this.view.open(indexes, browserEvent);
 	}
 
 	reveal(location: TRef, relativeTop?: number): void {
+		this.model.expandTo(location);
+
 		const index = this.model.getListIndex(location);
 
 		if (index === -1) {
@@ -1228,10 +1314,6 @@ export abstract class AbstractTree<T, TFilterData, TRef> implements IDisposable 
 	}
 
 	// List
-
-	get visibleNodeCount(): number {
-		return this.view.length;
-	}
 
 	private onLeftArrow(e: StandardKeyboardEvent): void {
 		e.preventDefault();

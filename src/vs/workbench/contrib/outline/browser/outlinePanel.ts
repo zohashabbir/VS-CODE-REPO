@@ -7,7 +7,6 @@ import * as dom from 'vs/base/browser/dom';
 import { Separator } from 'vs/base/browser/ui/actionbar/actionbar';
 import { ProgressBar } from 'vs/base/browser/ui/progressbar/progressbar';
 import { Action, IAction, RadioGroup } from 'vs/base/common/actions';
-import { firstIndex } from 'vs/base/common/arrays';
 import { createCancelablePromise, TimeoutTimer } from 'vs/base/common/async';
 import { isPromiseCanceledError } from 'vs/base/common/errors';
 import { Emitter } from 'vs/base/common/event';
@@ -15,7 +14,6 @@ import { defaultGenerator } from 'vs/base/common/idGenerator';
 import { dispose, IDisposable, toDisposable } from 'vs/base/common/lifecycle';
 import { LRUCache } from 'vs/base/common/map';
 import { escape } from 'vs/base/common/strings';
-import { URI } from 'vs/base/common/uri';
 import 'vs/css!./outlinePanel';
 import { ICodeEditor, isCodeEditor, isDiffEditor } from 'vs/editor/browser/editorBrowser';
 import { Range } from 'vs/editor/common/core/range';
@@ -24,7 +22,7 @@ import { ITextModel } from 'vs/editor/common/model';
 import { IModelContentChangedEvent } from 'vs/editor/common/model/textModelEvents';
 import { DocumentSymbolProviderRegistry } from 'vs/editor/common/modes';
 import { LanguageFeatureRegistry } from 'vs/editor/common/modes/languageFeatureRegistry';
-import { OutlineElement, OutlineModel, TreeElement } from 'vs/editor/contrib/documentSymbols/outlineModel';
+import { OutlineElement, OutlineModel, TreeElement, IOutlineMarker } from 'vs/editor/contrib/documentSymbols/outlineModel';
 import { localize } from 'vs/nls';
 import { IConfigurationService } from 'vs/platform/configuration/common/configuration';
 import { IContextKey, IContextKeyService } from 'vs/platform/contextkey/common/contextkey';
@@ -33,13 +31,12 @@ import { IResourceInput } from 'vs/platform/editor/common/editor';
 import { IInstantiationService } from 'vs/platform/instantiation/common/instantiation';
 import { IKeybindingService } from 'vs/platform/keybinding/common/keybinding';
 import { WorkbenchDataTree } from 'vs/platform/list/browser/listService';
-import { IMarkerService, MarkerSeverity } from 'vs/platform/markers/common/markers';
 import { IStorageService, StorageScope } from 'vs/platform/storage/common/storage';
 import { attachProgressBarStyler } from 'vs/platform/theme/common/styler';
 import { IThemeService } from 'vs/platform/theme/common/themeService';
 import { ViewletPanel } from 'vs/workbench/browser/parts/views/panelViewlet';
 import { IViewletViewOptions } from 'vs/workbench/browser/parts/views/viewsViewlet';
-import { CollapseAction2 } from 'vs/workbench/browser/viewlet';
+import { CollapseAction } from 'vs/workbench/browser/viewlet';
 import { ACTIVE_GROUP, IEditorService, SIDE_GROUP } from 'vs/workbench/services/editor/common/editorService';
 import { OutlineConfigKeys, OutlineViewFocused, OutlineViewFiltered } from 'vs/editor/contrib/documentSymbols/outline';
 import { FuzzyScore } from 'vs/base/common/filters';
@@ -47,6 +44,9 @@ import { OutlineDataSource, OutlineItemComparator, OutlineSortOrder, OutlineVirt
 import { IDataTreeViewState } from 'vs/base/browser/ui/tree/dataTree';
 import { StandardMouseEvent } from 'vs/base/browser/mouseEvent';
 import { basename } from 'vs/base/common/resources';
+import { IDataSource } from 'vs/base/browser/ui/tree/tree';
+import { IMarkerDecorationsService } from 'vs/editor/common/services/markersDecorationService';
+import { MarkerSeverity } from 'vs/platform/markers/common/markers';
 
 class RequestState {
 
@@ -72,10 +72,10 @@ class RequestOracle {
 
 	private _disposables = new Array<IDisposable>();
 	private _sessionDisposable: IDisposable;
-	private _lastState: RequestState;
+	private _lastState?: RequestState;
 
 	constructor(
-		private readonly _callback: (editor: ICodeEditor, change: IModelContentChangedEvent) => any,
+		private readonly _callback: (editor: ICodeEditor | undefined, change: IModelContentChangedEvent | undefined) => any,
 		private readonly _featureRegistry: LanguageFeatureRegistry<any>,
 		@IEditorService private readonly _editorService: IEditorService,
 	) {
@@ -99,7 +99,7 @@ class RequestOracle {
 			codeEditor = widget.getModifiedEditor();
 		}
 
-		if (!codeEditor || !codeEditor.getModel()) {
+		if (!codeEditor || !codeEditor.hasModel()) {
 			this._lastState = undefined;
 			this._callback(undefined, undefined);
 			return;
@@ -112,7 +112,7 @@ class RequestOracle {
 			this._featureRegistry.all(codeEditor.getModel()).length
 		);
 
-		if (thisState.equals(this._lastState)) {
+		if (this._lastState && thisState.equals(this._lastState)) {
 			// prevent unneccesary changes...
 			return;
 		}
@@ -123,10 +123,10 @@ class RequestOracle {
 		let handle: any;
 		let contentListener = codeEditor.onDidChangeModelContent(event => {
 			clearTimeout(handle);
-			handle = setTimeout(() => this._callback(codeEditor, event), 350);
+			handle = setTimeout(() => this._callback(codeEditor!, event), 350);
 		});
 		let modeListener = codeEditor.onDidChangeModelLanguage(_ => {
-			this._callback(codeEditor, undefined);
+			this._callback(codeEditor!, undefined);
 		});
 		let disposeListener = codeEditor.onDidDispose(() => {
 			this._callback(undefined, undefined);
@@ -144,13 +144,21 @@ class RequestOracle {
 
 class SimpleToggleAction extends Action {
 
-	constructor(label: string, checked: boolean, callback: (action: SimpleToggleAction) => any, className?: string) {
-		super(`simple` + defaultGenerator.nextId(), label, className, true, _ => {
+	private readonly _listener: IDisposable;
+
+	constructor(state: OutlineViewState, label: string, isChecked: () => boolean, callback: (action: SimpleToggleAction) => any, className?: string) {
+		super(`simple` + defaultGenerator.nextId(), label, className, true, () => {
 			this.checked = !this.checked;
 			callback(this);
-			return undefined;
+			return Promise.resolve();
 		});
-		this.checked = checked;
+		this.checked = isChecked();
+		this._listener = state.onDidChange(() => this.checked = isChecked());
+	}
+
+	dispose(): void {
+		this._listener.dispose();
+		super.dispose();
 	}
 }
 
@@ -198,7 +206,11 @@ class OutlineViewState {
 	}
 
 	persist(storageService: IStorageService): void {
-		storageService.store('outline/state', JSON.stringify({ followCursor: this.followCursor, sortBy: this.sortBy }), StorageScope.WORKSPACE);
+		storageService.store('outline/state', JSON.stringify({
+			followCursor: this.followCursor,
+			sortBy: this.sortBy,
+			filterOnType: this.filterOnType,
+		}), StorageScope.WORKSPACE);
 	}
 
 	restore(storageService: IStorageService): void {
@@ -214,6 +226,9 @@ class OutlineViewState {
 		}
 		this.followCursor = data.followCursor;
 		this.sortBy = data.sortBy;
+		if (typeof data.filterOnType === 'boolean') {
+			this.filterOnType = data.filterOnType;
+		}
 	}
 }
 
@@ -223,8 +238,7 @@ export class OutlinePanel extends ViewletPanel {
 
 	private _editorDisposables = new Array<IDisposable>();
 	private _outlineViewState = new OutlineViewState();
-	private _requestOracle: RequestOracle;
-	private _cachedHeight: number;
+	private _requestOracle?: RequestOracle;
 	private _domNode: HTMLElement;
 	private _message: HTMLDivElement;
 	private _inputContainer: HTMLDivElement;
@@ -246,7 +260,7 @@ export class OutlinePanel extends ViewletPanel {
 		@IThemeService private readonly _themeService: IThemeService,
 		@IStorageService private readonly _storageService: IStorageService,
 		@IEditorService private readonly _editorService: IEditorService,
-		@IMarkerService private readonly _markerService: IMarkerService,
+		@IMarkerDecorationsService private readonly _markerDecorationService: IMarkerDecorationsService,
 		@IConfigurationService private readonly _configurationService: IConfigurationService,
 		@IKeybindingService keybindingService: IKeybindingService,
 		@IConfigurationService configurationService: IConfigurationService,
@@ -306,7 +320,7 @@ export class OutlinePanel extends ViewletPanel {
 			treeContainer,
 			new OutlineVirtualDelegate(),
 			[new OutlineGroupRenderer(), this._treeRenderer],
-			this._treeDataSource,
+			this._treeDataSource as IDataSource<OutlineModel, OutlineItem>,
 			{
 				expandOnlyOnTwistieClick: true,
 				multipleSelectionSupport: false,
@@ -320,11 +334,30 @@ export class OutlinePanel extends ViewletPanel {
 		this._disposables.push(this._tree);
 		this._disposables.push(this._outlineViewState.onDidChange(this._onDidChangeUserState, this));
 
-		// todo@joh workaournd for the tree resetting the filter behaviour
-		// to something globally defined
+		// override the globally defined behaviour
 		this._tree.updateOptions({
 			filterOnType: this._outlineViewState.filterOnType
 		});
+
+		// feature: filter on type - keep tree and menu in sync
+		this.disposables.push(this._tree.onDidUpdateOptions(e => {
+			this._outlineViewState.filterOnType = Boolean(e.filterOnType);
+		}));
+
+		// feature: expand all nodes when filtering (not when finding)
+		let viewState: IDataTreeViewState | undefined;
+		this.disposables.push(this._tree.onDidChangeTypeFilterPattern(pattern => {
+			if (!this._tree.options.filterOnType) {
+				return;
+			}
+			if (!viewState && pattern) {
+				viewState = this._tree.getViewState();
+				this._tree.expandAll();
+			} else if (!pattern && viewState) {
+				this._tree.setInput(this._tree.getInput()!, viewState);
+				viewState = undefined;
+			}
+		}));
 
 		// feature: toggle icons
 		this.disposables.push(this._configurationService.onDidChangeConfiguration(e => {
@@ -335,7 +368,7 @@ export class OutlinePanel extends ViewletPanel {
 
 		this.disposables.push(this.onDidChangeBodyVisibility(visible => {
 			if (visible && !this._requestOracle) {
-				this._requestOracle = this._instantiationService.createInstance(RequestOracle, (editor, event) => this._doUpdate(editor, event), DocumentSymbolProviderRegistry);
+				this._requestOracle = this._instantiationService.createInstance(RequestOracle, (editor: ICodeEditor | undefined, event: IModelContentChangedEvent | undefined) => this._doUpdate(editor, event), DocumentSymbolProviderRegistry);
 			} else if (!visible) {
 				dispose(this._requestOracle);
 				this._requestOracle = undefined;
@@ -344,29 +377,27 @@ export class OutlinePanel extends ViewletPanel {
 		}));
 	}
 
-	protected layoutBody(height: number): void {
-		if (height !== this._cachedHeight) {
-			this._tree.layout(height);
-		}
+	protected layoutBody(height: number, width: number): void {
+		this._tree.layout(height, width);
 	}
 
 	getActions(): IAction[] {
 		return [
 			new Action('collapse', localize('collapse', "Collapse All"), 'explorer-action collapse-explorer', true, () => {
-				return new CollapseAction2(this._tree, true, undefined).run();
+				return new CollapseAction(this._tree, true, undefined).run();
 			})
 		];
 	}
 
 	getSecondaryActions(): IAction[] {
 		let group = new RadioGroup([
-			new SimpleToggleAction(localize('sortByPosition', "Sort By: Position"), this._outlineViewState.sortBy === OutlineSortOrder.ByPosition, _ => this._outlineViewState.sortBy = OutlineSortOrder.ByPosition),
-			new SimpleToggleAction(localize('sortByName', "Sort By: Name"), this._outlineViewState.sortBy === OutlineSortOrder.ByName, _ => this._outlineViewState.sortBy = OutlineSortOrder.ByName),
-			new SimpleToggleAction(localize('sortByKind', "Sort By: Type"), this._outlineViewState.sortBy === OutlineSortOrder.ByKind, _ => this._outlineViewState.sortBy = OutlineSortOrder.ByKind),
+			new SimpleToggleAction(this._outlineViewState, localize('sortByPosition', "Sort By: Position"), () => this._outlineViewState.sortBy === OutlineSortOrder.ByPosition, _ => this._outlineViewState.sortBy = OutlineSortOrder.ByPosition),
+			new SimpleToggleAction(this._outlineViewState, localize('sortByName', "Sort By: Name"), () => this._outlineViewState.sortBy === OutlineSortOrder.ByName, _ => this._outlineViewState.sortBy = OutlineSortOrder.ByName),
+			new SimpleToggleAction(this._outlineViewState, localize('sortByKind', "Sort By: Type"), () => this._outlineViewState.sortBy === OutlineSortOrder.ByKind, _ => this._outlineViewState.sortBy = OutlineSortOrder.ByKind),
 		]);
 		let result = [
-			new SimpleToggleAction(localize('followCur', "Follow Cursor"), this._outlineViewState.followCursor, action => this._outlineViewState.followCursor = action.checked),
-			new SimpleToggleAction(localize('filterOnType', "Filter on Type"), this._outlineViewState.filterOnType, action => this._outlineViewState.filterOnType = action.checked),
+			new SimpleToggleAction(this._outlineViewState, localize('followCur', "Follow Cursor"), () => this._outlineViewState.followCursor, action => this._outlineViewState.followCursor = action.checked),
+			new SimpleToggleAction(this._outlineViewState, localize('filterOnType', "Filter on Type"), () => this._outlineViewState.filterOnType, action => this._outlineViewState.filterOnType = action.checked),
 			new Separator(),
 			...group.actions,
 		];
@@ -383,8 +414,7 @@ export class OutlinePanel extends ViewletPanel {
 		}
 		if (e.sortBy) {
 			this._treeComparator.type = this._outlineViewState.sortBy;
-			// todo@joh resort
-			this._tree.updateChildren();
+			this._tree.resort();
 		}
 		if (e.filterOnType) {
 			this._tree.updateOptions({
@@ -395,12 +425,12 @@ export class OutlinePanel extends ViewletPanel {
 
 	private _showMessage(message: string) {
 		dom.addClass(this._domNode, 'message');
-		this._tree.setInput(undefined);
+		this._tree.setInput(undefined!);
 		this._progressBar.stop().hide();
 		this._message.innerText = escape(message);
 	}
 
-	private static _createOutlineModel(model: ITextModel, disposables: IDisposable[]): Promise<OutlineModel> {
+	private static _createOutlineModel(model: ITextModel, disposables: IDisposable[]): Promise<OutlineModel | undefined> {
 		let promise = createCancelablePromise(token => OutlineModel.create(model, token));
 		disposables.push({ dispose() { promise.cancel(); } });
 		return promise.catch(err => {
@@ -411,7 +441,7 @@ export class OutlinePanel extends ViewletPanel {
 		});
 	}
 
-	private async _doUpdate(editor: ICodeEditor, event: IModelContentChangedEvent): Promise<void> {
+	private async _doUpdate(editor: ICodeEditor | undefined, event: IModelContentChangedEvent | undefined): Promise<void> {
 		dispose(this._editorDisposables);
 
 		this._editorDisposables = new Array();
@@ -425,12 +455,12 @@ export class OutlinePanel extends ViewletPanel {
 			this._treeStates.set(oldModel.textModel.uri.toString(), state);
 		}
 
-		if (!editor || !DocumentSymbolProviderRegistry.has(editor.getModel())) {
+		if (!editor || !editor.hasModel() || !DocumentSymbolProviderRegistry.has(editor.getModel())) {
 			return this._showMessage(localize('no-editor', "There are no editors open that can provide outline information."));
 		}
 
 		let textModel = editor.getModel();
-		let loadingMessage: IDisposable;
+		let loadingMessage: IDisposable | undefined;
 		if (!oldModel) {
 			loadingMessage = new TimeoutTimer(
 				() => this._showMessage(localize('loading', "Loading document symbols for '{0}'...", basename(textModel.uri))),
@@ -438,12 +468,13 @@ export class OutlinePanel extends ViewletPanel {
 			);
 		}
 
-		let newModel = await OutlinePanel._createOutlineModel(textModel, this._editorDisposables);
+		let createdModel = await OutlinePanel._createOutlineModel(textModel, this._editorDisposables);
 		dispose(loadingMessage);
-		if (!newModel) {
+		if (!createdModel) {
 			return;
 		}
 
+		let newModel = createdModel;
 		if (TreeElement.empty(newModel)) {
 			return this._showMessage(localize('no-symbols', "No symbols found in document '{0}'", basename(textModel.uri)));
 		}
@@ -462,7 +493,7 @@ export class OutlinePanel extends ViewletPanel {
 			if (newRatio <= oldRatio * 0.5 || newRatio >= oldRatio * 1.5) {
 
 				let waitPromise = new Promise<boolean>(resolve => {
-					let handle = setTimeout(() => {
+					let handle: any = setTimeout(() => {
 						handle = undefined;
 						resolve(true);
 					}, 2000);
@@ -489,8 +520,6 @@ export class OutlinePanel extends ViewletPanel {
 			let state = this._treeStates.get(newModel.textModel.uri.toString());
 			await this._tree.setInput(newModel, state);
 		}
-
-		this.layoutBody(this._cachedHeight);
 
 		// transfer focus from domNode to the tree
 		if (this._domNode === document.activeElement) {
@@ -539,21 +568,26 @@ export class OutlinePanel extends ViewletPanel {
 		}));
 
 		// feature: show markers in outline
-		const updateMarker = (e: URI[], ignoreEmpty?: boolean) => {
+		const updateMarker = (model: ITextModel, ignoreEmpty?: boolean) => {
 			if (!this._configurationService.getValue(OutlineConfigKeys.problemsEnabled)) {
 				return;
 			}
-			if (firstIndex(e, a => a.toString() === textModel.uri.toString()) < 0) {
+			if (model !== textModel) {
 				return;
 			}
-			const marker = this._markerService.read({ resource: textModel.uri, severities: MarkerSeverity.Error | MarkerSeverity.Warning });
-			if (marker.length > 0 || !ignoreEmpty) {
-				newModel.updateMarker(marker);
+			const markers: IOutlineMarker[] = [];
+			for (const [range, marker] of this._markerDecorationService.getLiveMarkers(textModel)) {
+				if (marker.severity === MarkerSeverity.Error || marker.severity === MarkerSeverity.Warning) {
+					markers.push({ ...range, severity: marker.severity });
+				}
+			}
+			if (markers.length > 0 || !ignoreEmpty) {
+				newModel.updateMarker(markers);
 				this._tree.updateChildren();
 			}
 		};
-		updateMarker([textModel.uri], true);
-		this._editorDisposables.push(this._markerService.onMarkerChanged(updateMarker));
+		updateMarker(textModel, true);
+		this._editorDisposables.push(this._markerDecorationService.onDidChangeMarker(updateMarker));
 
 		this._editorDisposables.push(this.configurationService.onDidChangeConfiguration(e => {
 			if (e.affectsConfiguration(OutlineConfigKeys.problemsBadges) || e.affectsConfiguration(OutlineConfigKeys.problemsColors)) {
@@ -567,7 +601,7 @@ export class OutlinePanel extends ViewletPanel {
 				newModel.updateMarker([]);
 				this._tree.updateChildren();
 			} else {
-				updateMarker([textModel.uri], true);
+				updateMarker(textModel, true);
 			}
 		}));
 	}
@@ -584,7 +618,7 @@ export class OutlinePanel extends ViewletPanel {
 		} as IResourceInput, aside ? SIDE_GROUP : ACTIVE_GROUP);
 	}
 
-	private async _revealEditorSelection(model: OutlineModel, selection: Selection): Promise<void> {
+	private _revealEditorSelection(model: OutlineModel, selection: Selection): void {
 		if (!this._outlineViewState.followCursor || !this._tree.getInput() || !selection) {
 			return;
 		}
@@ -598,9 +632,8 @@ export class OutlinePanel extends ViewletPanel {
 			return;
 		}
 		let top = this._tree.getRelativeTop(item);
-		if (top < 0 || top > 1) {
-			// only when outside view port
-			await this._tree.reveal(item, 0.5);
+		if (top === null) {
+			this._tree.reveal(item, 0.5);
 		}
 		this._tree.setFocus([item], this._treeFakeUIEvent);
 		this._tree.setSelection([item], this._treeFakeUIEvent);

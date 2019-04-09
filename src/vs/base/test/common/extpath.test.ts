@@ -8,54 +8,14 @@ import * as platform from 'vs/base/common/platform';
 
 suite('Paths', () => {
 
-	test('normalize', () => {
-		assert.equal(extpath.normalize(''), '.');
-		assert.equal(extpath.normalize('.'), '.');
-		assert.equal(extpath.normalize('.'), '.');
-		assert.equal(extpath.normalize('../../far'), '../../far');
-		assert.equal(extpath.normalize('../bar'), '../bar');
-		assert.equal(extpath.normalize('../far'), '../far');
-		assert.equal(extpath.normalize('./'), './');
-		assert.equal(extpath.normalize('./././'), './');
-		assert.equal(extpath.normalize('./ff/./'), 'ff/');
-		assert.equal(extpath.normalize('./foo'), 'foo');
-		assert.equal(extpath.normalize('/'), '/');
-		assert.equal(extpath.normalize('/..'), '/');
-		assert.equal(extpath.normalize('///'), '/');
-		assert.equal(extpath.normalize('//foo'), '/foo');
-		assert.equal(extpath.normalize('//foo//'), '/foo/');
-		assert.equal(extpath.normalize('/foo'), '/foo');
-		assert.equal(extpath.normalize('/foo/bar.test'), '/foo/bar.test');
-		assert.equal(extpath.normalize('\\\\\\'), '/');
-		assert.equal(extpath.normalize('c:/../ff'), 'c:/ff');
-		assert.equal(extpath.normalize('c:\\./'), 'c:/');
-		assert.equal(extpath.normalize('foo/'), 'foo/');
-		assert.equal(extpath.normalize('foo/../../bar'), '../bar');
-		assert.equal(extpath.normalize('foo/./'), 'foo/');
-		assert.equal(extpath.normalize('foo/./bar'), 'foo/bar');
-		assert.equal(extpath.normalize('foo//'), 'foo/');
-		assert.equal(extpath.normalize('foo//'), 'foo/');
-		assert.equal(extpath.normalize('foo//bar'), 'foo/bar');
-		assert.equal(extpath.normalize('foo//bar/far'), 'foo/bar/far');
-		assert.equal(extpath.normalize('foo/bar/../../far'), 'far');
-		assert.equal(extpath.normalize('foo/bar/../far'), 'foo/far');
-		assert.equal(extpath.normalize('foo/far/../../bar'), 'bar');
-		assert.equal(extpath.normalize('foo/far/../../bar'), 'bar');
-		assert.equal(extpath.normalize('foo/xxx/..'), 'foo');
-		assert.equal(extpath.normalize('foo/xxx/../bar'), 'foo/bar');
-		assert.equal(extpath.normalize('foo/xxx/./..'), 'foo');
-		assert.equal(extpath.normalize('foo/xxx/./../bar'), 'foo/bar');
-		assert.equal(extpath.normalize('foo/xxx/./bar'), 'foo/xxx/bar');
-		assert.equal(extpath.normalize('foo\\bar'), 'foo/bar');
-		assert.equal(extpath.normalize(null), null);
-		assert.equal(extpath.normalize(undefined), undefined);
-
-		// https://github.com/Microsoft/vscode/issues/7234
-		assert.equal(extpath.join('/home/aeschli/workspaces/vscode/extensions/css', './syntaxes/css.plist'), '/home/aeschli/workspaces/vscode/extensions/css/syntaxes/css.plist');
+	test('toForwardSlashes', () => {
+		assert.equal(extpath.toSlashes('\\\\server\\share\\some\\path'), '//server/share/some/path');
+		assert.equal(extpath.toSlashes('c:\\test'), 'c:/test');
+		assert.equal(extpath.toSlashes('foo\\bar'), 'foo/bar');
+		assert.equal(extpath.toSlashes('/user/far'), '/user/far');
 	});
 
-	test('getRootLength', () => {
-
+	test('getRoot', () => {
 		assert.equal(extpath.getRoot('/user/far'), '/');
 		assert.equal(extpath.getRoot('\\\\server\\share\\some\\path'), '//server/share/');
 		assert.equal(extpath.getRoot('//server/share/some/path'), '//server/share/');
@@ -69,33 +29,6 @@ suite('Paths', () => {
 		assert.equal(extpath.getRoot('file:///foo'), 'file:///');
 		assert.equal(extpath.getRoot('file://foo'), '');
 
-	});
-
-	test('join', () => {
-		assert.equal(extpath.join('.', 'bar'), 'bar');
-		assert.equal(extpath.join('../../foo/bar', '../../foo'), '../../foo');
-		assert.equal(extpath.join('../../foo/bar', '../bar/foo'), '../../foo/bar/foo');
-		assert.equal(extpath.join('../foo/bar', '../bar/foo'), '../foo/bar/foo');
-		assert.equal(extpath.join('/', 'bar'), '/bar');
-		assert.equal(extpath.join('//server/far/boo', '../file.txt'), '//server/far/file.txt');
-		assert.equal(extpath.join('/foo/', '/bar'), '/foo/bar');
-		assert.equal(extpath.join('\\\\server\\far\\boo', '../file.txt'), '//server/far/file.txt');
-		assert.equal(extpath.join('\\\\server\\far\\boo', './file.txt'), '//server/far/boo/file.txt');
-		assert.equal(extpath.join('\\\\server\\far\\boo', '.\\file.txt'), '//server/far/boo/file.txt');
-		assert.equal(extpath.join('\\\\server\\far\\boo', 'file.txt'), '//server/far/boo/file.txt');
-		assert.equal(extpath.join('file:///c/users/test', 'test'), 'file:///c/users/test/test');
-		assert.equal(extpath.join('file://localhost/c$/GitDevelopment/express', './settings'), 'file://localhost/c$/GitDevelopment/express/settings'); // unc
-		assert.equal(extpath.join('file://localhost/c$/GitDevelopment/express', '.settings'), 'file://localhost/c$/GitDevelopment/express/.settings'); // unc
-		assert.equal(extpath.join('foo', '/bar'), 'foo/bar');
-		assert.equal(extpath.join('foo', 'bar'), 'foo/bar');
-		assert.equal(extpath.join('foo', 'bar/'), 'foo/bar/');
-		assert.equal(extpath.join('foo/', '/bar'), 'foo/bar');
-		assert.equal(extpath.join('foo/', '/bar/'), 'foo/bar/');
-		assert.equal(extpath.join('foo/', 'bar'), 'foo/bar');
-		assert.equal(extpath.join('foo/bar', '../bar/foo'), 'foo/bar/foo');
-		assert.equal(extpath.join('foo/bar', './bar/foo'), 'foo/bar/bar/foo');
-		assert.equal(extpath.join('http://localhost/test', '../next'), 'http://localhost/next');
-		assert.equal(extpath.join('http://localhost/test', 'test'), 'http://localhost/test/test');
 	});
 
 	test('isUNC', () => {
@@ -129,6 +62,56 @@ suite('Paths', () => {
 			assert.ok(!extpath.isValidBasename('test.txt\t'));
 			assert.ok(!extpath.isValidBasename('tes:t.txt'));
 			assert.ok(!extpath.isValidBasename('tes"t.txt'));
+		}
+	});
+
+	test('sanitizeFilePath', () => {
+		if (platform.isWindows) {
+			assert.equal(extpath.sanitizeFilePath('.', 'C:\\the\\cwd'), 'C:\\the\\cwd');
+			assert.equal(extpath.sanitizeFilePath('', 'C:\\the\\cwd'), 'C:\\the\\cwd');
+
+			assert.equal(extpath.sanitizeFilePath('C:', 'C:\\the\\cwd'), 'C:\\');
+			assert.equal(extpath.sanitizeFilePath('C:\\', 'C:\\the\\cwd'), 'C:\\');
+			assert.equal(extpath.sanitizeFilePath('C:\\\\', 'C:\\the\\cwd'), 'C:\\');
+
+			assert.equal(extpath.sanitizeFilePath('C:\\folder\\my.txt', 'C:\\the\\cwd'), 'C:\\folder\\my.txt');
+			assert.equal(extpath.sanitizeFilePath('C:\\folder\\my', 'C:\\the\\cwd'), 'C:\\folder\\my');
+			assert.equal(extpath.sanitizeFilePath('C:\\folder\\..\\my', 'C:\\the\\cwd'), 'C:\\my');
+			assert.equal(extpath.sanitizeFilePath('C:\\folder\\my\\', 'C:\\the\\cwd'), 'C:\\folder\\my');
+			assert.equal(extpath.sanitizeFilePath('C:\\folder\\my\\\\\\', 'C:\\the\\cwd'), 'C:\\folder\\my');
+
+			assert.equal(extpath.sanitizeFilePath('my.txt', 'C:\\the\\cwd'), 'C:\\the\\cwd\\my.txt');
+			assert.equal(extpath.sanitizeFilePath('my.txt\\', 'C:\\the\\cwd'), 'C:\\the\\cwd\\my.txt');
+
+			assert.equal(extpath.sanitizeFilePath('\\\\localhost\\folder\\my', 'C:\\the\\cwd'), '\\\\localhost\\folder\\my');
+			assert.equal(extpath.sanitizeFilePath('\\\\localhost\\folder\\my\\', 'C:\\the\\cwd'), '\\\\localhost\\folder\\my');
+		} else {
+			assert.equal(extpath.sanitizeFilePath('.', '/the/cwd'), '/the/cwd');
+			assert.equal(extpath.sanitizeFilePath('', '/the/cwd'), '/the/cwd');
+			assert.equal(extpath.sanitizeFilePath('/', '/the/cwd'), '/');
+
+			assert.equal(extpath.sanitizeFilePath('/folder/my.txt', '/the/cwd'), '/folder/my.txt');
+			assert.equal(extpath.sanitizeFilePath('/folder/my', '/the/cwd'), '/folder/my');
+			assert.equal(extpath.sanitizeFilePath('/folder/../my', '/the/cwd'), '/my');
+			assert.equal(extpath.sanitizeFilePath('/folder/my/', '/the/cwd'), '/folder/my');
+			assert.equal(extpath.sanitizeFilePath('/folder/my///', '/the/cwd'), '/folder/my');
+
+			assert.equal(extpath.sanitizeFilePath('my.txt', '/the/cwd'), '/the/cwd/my.txt');
+			assert.equal(extpath.sanitizeFilePath('my.txt/', '/the/cwd'), '/the/cwd/my.txt');
+		}
+	});
+
+	test('isRoot', () => {
+		if (platform.isWindows) {
+			assert.ok(extpath.isRootOrDriveLetter('c:'));
+			assert.ok(extpath.isRootOrDriveLetter('D:'));
+			assert.ok(extpath.isRootOrDriveLetter('D:/'));
+			assert.ok(extpath.isRootOrDriveLetter('D:\\'));
+			assert.ok(!extpath.isRootOrDriveLetter('D:\\path'));
+			assert.ok(!extpath.isRootOrDriveLetter('D:/path'));
+		} else {
+			assert.ok(extpath.isRootOrDriveLetter('/'));
+			assert.ok(!extpath.isRootOrDriveLetter('/path'));
 		}
 	});
 });

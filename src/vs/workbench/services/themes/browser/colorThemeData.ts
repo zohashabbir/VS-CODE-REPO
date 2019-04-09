@@ -3,7 +3,6 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import * as Extpath from 'vs/base/common/extpath';
 import { basename } from 'vs/base/common/path';
 import * as Json from 'vs/base/common/json';
 import { Color } from 'vs/base/common/color';
@@ -21,6 +20,7 @@ import { getParseErrorMessage } from 'vs/base/common/jsonErrorMessages';
 import { URI } from 'vs/base/common/uri';
 import { IFileService } from 'vs/platform/files/common/files';
 import { parse as parsePList } from 'vs/workbench/services/themes/common/plistParser';
+import { startsWith } from 'vs/base/common/strings';
 
 let colorRegistry = Registry.as<IColorRegistry>(Extensions.ColorContribution);
 
@@ -36,28 +36,61 @@ const tokenGroupToScopesMap: { [setting: string]: string[] } = {
 
 export class ColorThemeData implements IColorTheme {
 
-	private constructor() {
-	}
-
 	id: string;
 	label: string;
 	settingsId: string;
 	description?: string;
 	isLoaded: boolean;
 	location?: URI;
-	watch: boolean;
-	extensionData: ExtensionData;
-
-	get tokenColors(): ITokenColorizationRule[] {
-		// Add the custom colors after the theme colors
-		// so that they will override them
-		return this.themeTokenColors.concat(this.customTokenColors);
-	}
+	watch?: boolean;
+	extensionData?: ExtensionData;
 
 	private themeTokenColors: ITokenColorizationRule[] = [];
 	private customTokenColors: ITokenColorizationRule[] = [];
 	private colorMap: IColorMap = {};
 	private customColorMap: IColorMap = {};
+
+	private constructor(id: string, label: string, settingsId: string) {
+		this.id = id;
+		this.label = label;
+		this.settingsId = settingsId;
+		this.isLoaded = false;
+	}
+
+	get tokenColors(): ITokenColorizationRule[] {
+		const result: ITokenColorizationRule[] = [];
+
+		// the default rule (scope empty) is always the first rule. Ignore all other default rules.
+		const foreground = this.getColor(editorForeground) || this.getDefault(editorForeground)!;
+		const background = this.getColor(editorBackground) || this.getDefault(editorBackground)!;
+		result.push({
+			settings: {
+				foreground: Color.Format.CSS.formatHexA(foreground),
+				background: Color.Format.CSS.formatHexA(background)
+			}
+		});
+
+		let hasDefaultTokens = false;
+
+		function addRule(rule: ITokenColorizationRule) {
+			if (rule.scope && rule.settings) {
+				if (rule.scope === 'token.info-token') {
+					hasDefaultTokens = true;
+				}
+				result.push(rule);
+			}
+		}
+
+		this.themeTokenColors.forEach(addRule);
+		// Add the custom colors after the theme colors
+		// so that they will override them
+		this.customTokenColors.forEach(addRule);
+
+		if (!hasDefaultTokens) {
+			defaultThemeColors[this.type].forEach(addRule);
+		}
+		return result;
+	}
 
 	public getColor(colorId: ColorIdentifier, useDefault?: boolean): Color | undefined {
 		let color: Color | undefined = this.customColorMap[colorId];
@@ -86,9 +119,6 @@ export class ColorThemeData implements IColorTheme {
 		const themeSpecificColors = colors[`[${this.settingsId}]`] as IColorCustomizations;
 		if (types.isObject(themeSpecificColors)) {
 			this.overwriteCustomColors(themeSpecificColors);
-		}
-		if (this.themeTokenColors && this.themeTokenColors.length) {
-			updateDefaultRuleSettings(this.themeTokenColors[0], this);
 		}
 	}
 
@@ -149,30 +179,11 @@ export class ColorThemeData implements IColorTheme {
 		if (!this.location) {
 			return Promise.resolve(undefined);
 		}
+		this.themeTokenColors = [];
+		this.colorMap = {};
 		return _loadColorTheme(fileService, this.location, this.themeTokenColors, this.colorMap).then(_ => {
 			this.isLoaded = true;
-			this.sanitizeTokenColors();
 		});
-	}
-
-	/**
-	 * Place the default settings first and add the token-info rules
-	 */
-	private sanitizeTokenColors() {
-		let hasDefaultTokens = false;
-		let updatedTokenColors: ITokenColorizationRule[] = [updateDefaultRuleSettings({ settings: {} }, this)];
-		this.themeTokenColors.forEach(rule => {
-			if (rule.scope && rule.settings) {
-				if (rule.scope === 'token.info-token') {
-					hasDefaultTokens = true;
-				}
-				updatedTokenColors.push(rule);
-			}
-		});
-		if (!hasDefaultTokens) {
-			updatedTokenColors.push(...defaultThemeColors[this.type]);
-		}
-		this.themeTokenColors = updatedTokenColors;
 	}
 
 	toStorageData() {
@@ -194,7 +205,7 @@ export class ColorThemeData implements IColorTheme {
 	}
 
 	hasEqualData(other: ColorThemeData) {
-		return objects.equals(this.colorMap, other.colorMap) && objects.equals(this.tokenColors, other.tokenColors);
+		return objects.equals(this.colorMap, other.colorMap) && objects.equals(this.themeTokenColors, other.themeTokenColors);
 	}
 
 	get baseTheme(): string {
@@ -212,23 +223,17 @@ export class ColorThemeData implements IColorTheme {
 	// constructors
 
 	static createUnloadedTheme(id: string): ColorThemeData {
-		let themeData = new ColorThemeData();
-		themeData.id = id;
-		themeData.label = '';
-		themeData.settingsId = '__' + id;
+		let themeData = new ColorThemeData(id, '', '__' + id);
 		themeData.isLoaded = false;
-		themeData.themeTokenColors = [{ settings: {} }];
+		themeData.themeTokenColors = [];
 		themeData.watch = false;
 		return themeData;
 	}
 
 	static createLoadedEmptyTheme(id: string, settingsId: string): ColorThemeData {
-		let themeData = new ColorThemeData();
-		themeData.id = id;
-		themeData.label = '';
-		themeData.settingsId = settingsId;
+		let themeData = new ColorThemeData(id, '', settingsId);
 		themeData.isLoaded = true;
-		themeData.themeTokenColors = [{ settings: {} }];
+		themeData.themeTokenColors = [];
 		themeData.watch = false;
 		return themeData;
 	}
@@ -236,7 +241,7 @@ export class ColorThemeData implements IColorTheme {
 	static fromStorageData(input: string): ColorThemeData | undefined {
 		try {
 			let data = JSON.parse(input);
-			let theme = new ColorThemeData();
+			let theme = new ColorThemeData('', '', '');
 			for (let key in data) {
 				switch (key) {
 					case 'colorMap':
@@ -251,6 +256,9 @@ export class ColorThemeData implements IColorTheme {
 						break;
 				}
 			}
+			if (!theme.id || !theme.settingsId) {
+				return undefined;
+			}
 			return theme;
 		} catch (e) {
 			return undefined;
@@ -258,13 +266,12 @@ export class ColorThemeData implements IColorTheme {
 	}
 
 	static fromExtensionTheme(theme: IThemeExtensionPoint, colorThemeLocation: URI, extensionData: ExtensionData): ColorThemeData {
-		let baseTheme: string = theme['uiTheme'] || 'vs-dark';
-
-		let themeSelector = toCSSSelector(extensionData.extensionId + '-' + Extpath.normalize(theme.path));
-		let themeData = new ColorThemeData();
-		themeData.id = `${baseTheme} ${themeSelector}`;
-		themeData.label = theme.label || basename(theme.path);
-		themeData.settingsId = theme.id || themeData.label;
+		const baseTheme: string = theme['uiTheme'] || 'vs-dark';
+		const themeSelector = toCSSSelector(extensionData.extensionId, theme.path);
+		const id = `${baseTheme} ${themeSelector}`;
+		const label = theme.label || basename(theme.path);
+		const settingsId = theme.id || label;
+		const themeData = new ColorThemeData(id, label, settingsId);
 		themeData.description = theme.description;
 		themeData.watch = theme._watch === true;
 		themeData.location = colorThemeLocation;
@@ -274,7 +281,13 @@ export class ColorThemeData implements IColorTheme {
 	}
 }
 
-function toCSSSelector(str: string) {
+function toCSSSelector(extensionId: string, path: string) {
+	if (startsWith(path, './')) {
+		path = path.substr(2);
+	}
+	let str = `${extensionId}-${path}`;
+
+	//remove all characters that are not allowed in css
 	str = str.replace(/[^_\-a-zA-Z0-9]/g, '-');
 	if (str.charAt(0).match(/[0-9\-]/)) {
 		str = '_' + str;
@@ -347,14 +360,6 @@ function _loadSyntaxTokens(fileService: IFileService, themeLocation: URI, result
 	}, error => {
 		return Promise.reject(new Error(nls.localize('error.cannotload', "Problems loading tmTheme file {0}: {1}", themeLocation.toString(), error.message)));
 	});
-}
-
-function updateDefaultRuleSettings(defaultRule: ITokenColorizationRule, theme: ColorThemeData): ITokenColorizationRule {
-	const foreground = theme.getColor(editorForeground) || theme.getDefault(editorForeground)!;
-	const background = theme.getColor(editorBackground) || theme.getDefault(editorBackground)!;
-	defaultRule.settings.foreground = Color.Format.CSS.formatHexA(foreground);
-	defaultRule.settings.background = Color.Format.CSS.formatHexA(background);
-	return defaultRule;
 }
 
 let defaultThemeColors: { [baseTheme: string]: ITokenColorizationRule[] } = {

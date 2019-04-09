@@ -28,13 +28,11 @@ import { IExtensionsWorkbenchService, IExtensionsViewlet, VIEWLET_ID, IExtension
 import { RatingsWidget, InstallCountWidget, RemoteBadgeWidget } from 'vs/workbench/contrib/extensions/electron-browser/extensionsWidgets';
 import { EditorOptions } from 'vs/workbench/common/editor';
 import { ActionBar } from 'vs/base/browser/ui/actionbar/actionbar';
-import { CombinedInstallAction, UpdateAction, ExtensionEditorDropDownAction, ReloadAction, MaliciousStatusLabelAction, IgnoreExtensionRecommendationAction, UndoIgnoreExtensionRecommendationAction, EnableDropDownAction, DisableDropDownAction, StatusLabelAction, SetFileIconThemeAction, SetColorThemeAction } from 'vs/workbench/contrib/extensions/electron-browser/extensionsActions';
+import { CombinedInstallAction, UpdateAction, ExtensionEditorDropDownAction, ReloadAction, MaliciousStatusLabelAction, IgnoreExtensionRecommendationAction, UndoIgnoreExtensionRecommendationAction, EnableDropDownAction, DisableDropDownAction, StatusLabelAction, SetFileIconThemeAction, SetColorThemeAction, RemoteInstallAction } from 'vs/workbench/contrib/extensions/electron-browser/extensionsActions';
 import { WebviewElement } from 'vs/workbench/contrib/webview/electron-browser/webviewElement';
 import { IKeybindingService } from 'vs/platform/keybinding/common/keybinding';
 import { DomScrollableElement } from 'vs/base/browser/ui/scrollbar/scrollableElement';
 import { IOpenerService } from 'vs/platform/opener/common/opener';
-import { Tree } from 'vs/base/parts/tree/browser/treeImpl';
-import { IPartService, Parts } from 'vs/workbench/services/part/common/partService';
 import { IThemeService } from 'vs/platform/theme/common/themeService';
 import { KeybindingLabel } from 'vs/base/browser/ui/keybindingLabel/keybindingLabel';
 import { ContextKeyExpr } from 'vs/platform/contextkey/common/contextkey';
@@ -51,7 +49,7 @@ import { KeybindingParser } from 'vs/base/common/keybindingParser';
 import { IStorageService } from 'vs/platform/storage/common/storage';
 import { IExtensionService } from 'vs/workbench/services/extensions/common/extensions';
 import { getDefaultValue } from 'vs/platform/configuration/common/configurationRegistry';
-import { isUndefined } from 'vs/base/common/types';
+import { isUndefined, withUndefinedAsNull } from 'vs/base/common/types';
 import { IWorkbenchThemeService } from 'vs/workbench/services/themes/common/workbenchThemeService';
 
 function renderBody(body: string): string {
@@ -89,8 +87,8 @@ function removeEmbeddedSVGs(documentContent: string): string {
 
 class NavBar {
 
-	private _onChange = new Emitter<{ id: string, focus: boolean }>();
-	get onChange(): Event<{ id: string, focus: boolean }> { return this._onChange.event; }
+	private _onChange = new Emitter<{ id: string | null, focus: boolean }>();
+	get onChange(): Event<{ id: string | null, focus: boolean }> { return this._onChange.event; }
 
 	private currentId: string | null = null;
 	private actions: Action[];
@@ -126,13 +124,13 @@ class NavBar {
 
 	_update(id: string | null = this.currentId, focus?: boolean): Promise<void> {
 		this.currentId = id;
-		this._onChange.fire({ id, focus });
+		this._onChange.fire({ id, focus: !!focus });
 		this.actions.forEach(a => a.enabled = a.id !== id);
 		return Promise.resolve(undefined);
 	}
 
 	dispose(): void {
-		this.actionbar = dispose(this.actionbar);
+		dispose(this.actionbar);
 	}
 }
 
@@ -197,7 +195,6 @@ export class ExtensionEditor extends BaseEditor {
 		@IKeybindingService private readonly keybindingService: IKeybindingService,
 		@INotificationService private readonly notificationService: INotificationService,
 		@IOpenerService private readonly openerService: IOpenerService,
-		@IPartService private readonly partService: IPartService,
 		@IExtensionTipsService private readonly extensionTipsService: IExtensionTipsService,
 		@IStorageService storageService: IStorageService,
 		@IExtensionService private readonly extensionService: IExtensionService,
@@ -214,6 +211,8 @@ export class ExtensionEditor extends BaseEditor {
 
 	createEditor(parent: HTMLElement): void {
 		const root = append(parent, $('.extension-editor'));
+		root.tabIndex = 0; // this is required for the focus tracker on the editor
+		root.style.outline = 'none';
 		this.header = append(root, $('.header'));
 
 		this.iconContainer = append(this.header, $('.icon-container'));
@@ -254,7 +253,7 @@ export class ExtensionEditor extends BaseEditor {
 				if (action instanceof ExtensionEditorDropDownAction) {
 					return action.createActionItem();
 				}
-				return null;
+				return undefined;
 			}
 		});
 
@@ -376,6 +375,7 @@ export class ExtensionEditor extends BaseEditor {
 			this.instantiationService.createInstance(SetFileIconThemeAction, fileIconThemes),
 			this.instantiationService.createInstance(EnableDropDownAction),
 			this.instantiationService.createInstance(DisableDropDownAction, runningExtensions),
+			this.instantiationService.createInstance(RemoteInstallAction),
 			this.instantiationService.createInstance(CombinedInstallAction),
 			this.instantiationService.createInstance(MaliciousStatusLabelAction, true),
 		];
@@ -531,18 +531,20 @@ export class ExtensionEditor extends BaseEditor {
 			.then(renderBody)
 			.then(removeEmbeddedSVGs)
 			.then(body => {
-				const wbeviewElement = this.instantiationService.createInstance(WebviewElement,
-					this.partService.getContainer(Parts.EDITOR_PART),
-					{},
+				const webviewElement = this.instantiationService.createInstance(WebviewElement,
+					{
+						enableFindWidget: true,
+					},
 					{
 						svgWhiteList: this.extensionsWorkbenchService.allowedBadgeProviders
 					});
-				wbeviewElement.mountTo(this.content);
-				const removeLayoutParticipant = arrays.insert(this.layoutParticipants, wbeviewElement);
+				webviewElement.mountTo(this.content);
+				this.contentDisposables.push(webviewElement.onDidFocus(() => this.fireOnDidFocus()));
+				const removeLayoutParticipant = arrays.insert(this.layoutParticipants, webviewElement);
 				this.contentDisposables.push(toDisposable(removeLayoutParticipant));
-				wbeviewElement.contents = body;
+				webviewElement.contents = body;
 
-				wbeviewElement.onDidClickLink(link => {
+				this.contentDisposables.push(webviewElement.onDidClickLink(link => {
 					if (!link) {
 						return;
 					}
@@ -550,9 +552,9 @@ export class ExtensionEditor extends BaseEditor {
 					if (['http', 'https', 'mailto'].indexOf(link.scheme) >= 0 || (link.scheme === 'command' && link.path === ShowCurrentReleaseNotesAction.ID)) {
 						this.openerService.open(link);
 					}
-				}, null, this.contentDisposables);
-				this.contentDisposables.push(wbeviewElement);
-				return wbeviewElement;
+				}, null, this.contentDisposables));
+				this.contentDisposables.push(webviewElement);
+				return webviewElement;
 			})
 			.then(undefined, () => {
 				const p = append(this.content, $('p.nocontent'));
@@ -562,17 +564,21 @@ export class ExtensionEditor extends BaseEditor {
 	}
 
 	private openReadme(): Promise<IActiveElement> {
-		return this.openMarkdown(this.extensionReadme.get(), localize('noReadme', "No README available."));
+		return this.openMarkdown(this.extensionReadme!.get(), localize('noReadme', "No README available."));
 	}
 
 	private openChangelog(): Promise<IActiveElement> {
-		return this.openMarkdown(this.extensionChangelog.get(), localize('noChangelog', "No Changelog available."));
+		return this.openMarkdown(this.extensionChangelog!.get(), localize('noChangelog', "No Changelog available."));
 	}
 
 	private openContributions(): Promise<IActiveElement> {
 		const content = $('div', { class: 'subcontent', tabindex: '0' });
-		return this.loadContents(() => this.extensionManifest.get())
+		return this.loadContents(() => this.extensionManifest!.get())
 			.then(manifest => {
+				if (!manifest) {
+					return content;
+				}
+
 				const scrollableContent = new DomScrollableElement(content, {});
 
 				const layout = () => scrollableContent.scanDomNode();
@@ -617,7 +623,7 @@ export class ExtensionEditor extends BaseEditor {
 			return Promise.resolve(this.content);
 		}
 
-		return this.loadContents(() => this.extensionDependencies.get())
+		return this.loadContents(() => this.extensionDependencies!.get())
 			.then<IActiveElement, IActiveElement>(extensionDependencies => {
 				if (extensionDependencies) {
 					const content = $('div', { class: 'subcontent' });
@@ -648,7 +654,7 @@ export class ExtensionEditor extends BaseEditor {
 			});
 	}
 
-	private renderDependencies(container: HTMLElement, extensionDependencies: IExtensionDependencies): Tree {
+	private renderDependencies(container: HTMLElement, extensionDependencies: IExtensionDependencies): ExtensionsTree {
 		class ExtensionData implements IExtensionData {
 
 			private readonly extensionDependencies: IExtensionDependencies;
@@ -697,7 +703,7 @@ export class ExtensionEditor extends BaseEditor {
 		return Promise.resolve({ focus() { extensionsPackTree.domFocus(); } });
 	}
 
-	private renderExtensionPack(container: HTMLElement, extension: IExtension): Tree {
+	private renderExtensionPack(container: HTMLElement, extension: IExtension): ExtensionsTree {
 		const extensionsWorkbenchService = this.extensionsWorkbenchService;
 		class ExtensionData implements IExtensionData {
 
@@ -706,7 +712,7 @@ export class ExtensionEditor extends BaseEditor {
 
 			constructor(extension: IExtension, parent?: IExtensionData) {
 				this.extension = extension;
-				this.parent = parent || null;
+				this.parent = withUndefinedAsNull(parent);
 			}
 
 			get hasChildren(): boolean {
@@ -716,7 +722,7 @@ export class ExtensionEditor extends BaseEditor {
 			getChildren(): Promise<IExtensionData[] | null> {
 				if (this.hasChildren) {
 					const names = arrays.distinct(this.extension.extensionPack, e => e.toLowerCase());
-					return extensionsWorkbenchService.queryGallery({ names, pageSize: names.length })
+					return extensionsWorkbenchService.queryGallery({ names, pageSize: names.length }, CancellationToken.None)
 						.then(result => result.firstPage.map(extension => new ExtensionData(extension, this)));
 				}
 				return Promise.resolve(null);

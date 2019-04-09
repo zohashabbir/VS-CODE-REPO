@@ -5,7 +5,7 @@
 
 import * as DOM from 'vs/base/browser/dom';
 import { IListVirtualDelegate } from 'vs/base/browser/ui/list/list';
-import { DefaultStyleController } from 'vs/base/browser/ui/list/listWidget';
+import { DefaultStyleController, IAccessibilityProvider } from 'vs/base/browser/ui/list/listWidget';
 import { IObjectTreeOptions, ObjectTree } from 'vs/base/browser/ui/tree/objectTree';
 import { ITreeElement, ITreeNode, ITreeRenderer } from 'vs/base/browser/ui/tree/tree';
 import { Iterator } from 'vs/base/common/iterator';
@@ -16,12 +16,13 @@ import { IThemeService } from 'vs/platform/theme/common/themeService';
 import { SettingsTreeFilter } from 'vs/workbench/contrib/preferences/browser/settingsTree';
 import { ISettingsEditorViewState, SearchResultModel, SettingsTreeElement, SettingsTreeGroupElement, SettingsTreeSettingElement } from 'vs/workbench/contrib/preferences/browser/settingsTreeModels';
 import { settingsHeaderForeground } from 'vs/workbench/contrib/preferences/browser/settingsWidgets';
+import { localize } from 'vs/nls';
 
 const $ = DOM.$;
 
 export class TOCTreeModel {
 
-	private _currentSearchModel: SearchResultModel;
+	private _currentSearchModel: SearchResultModel | null;
 	private _settingsTreeRoot: SettingsTreeGroupElement;
 
 	constructor(private _viewState: ISettingsEditorViewState) {
@@ -36,7 +37,11 @@ export class TOCTreeModel {
 		this.update();
 	}
 
-	set currentSearchModel(model: SearchResultModel) {
+	get currentSearchModel(): SearchResultModel | null {
+		return this._currentSearchModel;
+	}
+
+	set currentSearchModel(model: SearchResultModel | null) {
 		this._currentSearchModel = model;
 		this.update();
 	}
@@ -60,7 +65,7 @@ export class TOCTreeModel {
 
 		const childCount = group.children
 			.filter(child => child instanceof SettingsTreeGroupElement)
-			.reduce((acc, cur) => acc + (<SettingsTreeGroupElement>cur).count, 0);
+			.reduce((acc, cur) => acc + (<SettingsTreeGroupElement>cur).count!, 0);
 
 		group.count = childCount + this.getGroupCount(group);
 	}
@@ -149,6 +154,30 @@ export function createTOCIterator(model: TOCTreeModel | SettingsTreeGroupElement
 	});
 }
 
+class SettingsAccessibilityProvider implements IAccessibilityProvider<SettingsTreeGroupElement> {
+	getAriaLabel(element: SettingsTreeElement): string {
+		if (!element) {
+			return '';
+		}
+
+		if (element instanceof SettingsTreeGroupElement) {
+			return localize('groupRowAriaLabel', "{0}, group", element.label);
+		}
+
+		return '';
+	}
+
+	getAriaLevel(element: SettingsTreeGroupElement): number {
+		let i = 1;
+		while (element instanceof SettingsTreeGroupElement && element.parent) {
+			i++;
+			element = element.parent;
+		}
+
+		return i;
+	}
+}
+
 export class TOCTree extends ObjectTree<SettingsTreeGroupElement> {
 	constructor(
 		container: HTMLElement,
@@ -168,7 +197,8 @@ export class TOCTree extends ObjectTree<SettingsTreeGroupElement> {
 					return e.id;
 				}
 			},
-			styleController: new DefaultStyleController(DOM.createStyleSheet(container), treeClass)
+			styleController: new DefaultStyleController(DOM.createStyleSheet(container), treeClass),
+			accessibilityProvider: instantiationService.createInstance(SettingsAccessibilityProvider)
 		};
 
 		super(container,

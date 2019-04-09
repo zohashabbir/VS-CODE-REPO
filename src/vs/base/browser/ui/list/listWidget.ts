@@ -7,7 +7,7 @@ import 'vs/css!./list';
 import { localize } from 'vs/nls';
 import { IDisposable, dispose } from 'vs/base/common/lifecycle';
 import { isNumber } from 'vs/base/common/types';
-import { range, firstIndex } from 'vs/base/common/arrays';
+import { range, firstIndex, binarySearch } from 'vs/base/common/arrays';
 import { memoize } from 'vs/base/common/decorators';
 import * as DOM from 'vs/base/browser/dom';
 import * as platform from 'vs/base/common/platform';
@@ -20,7 +20,7 @@ import { IListVirtualDelegate, IListRenderer, IListEvent, IListContextMenuEvent,
 import { ListView, IListViewOptions, IListViewDragAndDrop, IAriaSetProvider } from './listView';
 import { Color } from 'vs/base/common/color';
 import { mixin } from 'vs/base/common/objects';
-import { ScrollbarVisibility } from 'vs/base/common/scrollable';
+import { ScrollbarVisibility, ScrollEvent } from 'vs/base/common/scrollable';
 import { ISpliceable } from 'vs/base/common/sequence';
 import { CombinedSpliceable } from 'vs/base/browser/ui/list/splice';
 import { clamp } from 'vs/base/common/numbers';
@@ -107,10 +107,8 @@ class TraitRenderer<T> implements IListRenderer<T, ITraitTemplateData>
 
 class Trait<T> implements ISpliceable<boolean>, IDisposable {
 
-	/**
-	 * Sorted indexes which have this trait.
-	 */
-	private indexes: number[];
+	private indexes: number[] = [];
+	private sortedIndexes: number[] = [];
 
 	private _onChange = new Emitter<ITraitChangeEvent>();
 	get onChange(): Event<ITraitChangeEvent> { return this._onChange.event; }
@@ -122,21 +120,19 @@ class Trait<T> implements ISpliceable<boolean>, IDisposable {
 		return new TraitRenderer<T>(this);
 	}
 
-	constructor(private _trait: string) {
-		this.indexes = [];
-	}
+	constructor(private _trait: string) { }
 
 	splice(start: number, deleteCount: number, elements: boolean[]): void {
 		const diff = elements.length - deleteCount;
 		const end = start + deleteCount;
 		const indexes = [
-			...this.indexes.filter(i => i < start),
+			...this.sortedIndexes.filter(i => i < start),
 			...elements.map((hasTrait, i) => hasTrait ? i + start : -1).filter(i => i !== -1),
-			...this.indexes.filter(i => i >= end).map(i => i + diff)
+			...this.sortedIndexes.filter(i => i >= end).map(i => i + diff)
 		];
 
 		this.renderer.splice(start, deleteCount, elements.length);
-		this.set(indexes);
+		this._set(indexes, indexes);
 	}
 
 	renderIndex(index: number, container: HTMLElement): void {
@@ -154,10 +150,17 @@ class Trait<T> implements ISpliceable<boolean>, IDisposable {
 	 * @return The old indexes which had this trait.
 	 */
 	set(indexes: number[], browserEvent?: UIEvent): number[] {
-		const result = this.indexes;
-		this.indexes = indexes;
+		return this._set(indexes, [...indexes].sort(numericSort), browserEvent);
+	}
 
-		const toRender = disjunction(result, indexes);
+	private _set(indexes: number[], sortedIndexes: number[], browserEvent?: UIEvent): number[] {
+		const result = this.indexes;
+		const sortedResult = this.sortedIndexes;
+
+		this.indexes = indexes;
+		this.sortedIndexes = sortedIndexes;
+
+		const toRender = disjunction(sortedResult, indexes);
 		this.renderer.renderIndexes(toRender);
 
 		this._onChange.fire({ indexes, browserEvent });
@@ -169,7 +172,7 @@ class Trait<T> implements ISpliceable<boolean>, IDisposable {
 	}
 
 	contains(index: number): boolean {
-		return this.indexes.some(i => i === index);
+		return binarySearch(this.sortedIndexes, index, numericSort) >= 0;
 	}
 
 	dispose() {
@@ -334,6 +337,10 @@ class TypeLabelController<T> implements IDisposable {
 
 	private enabled = false;
 	private state: TypeLabelControllerState = TypeLabelControllerState.Idle;
+
+	private automaticKeyboardNavigation = true;
+	private triggered = false;
+
 	private enabledDisposables: IDisposable[] = [];
 	private disposables: IDisposable[] = [];
 
@@ -342,11 +349,10 @@ class TypeLabelController<T> implements IDisposable {
 		private view: ListView<T>,
 		private keyboardNavigationLabelProvider: IKeyboardNavigationLabelProvider<T>
 	) {
-		list.onDidUpdateOptions(this.onDidUpdateListOptions, this, this.disposables);
-		this.onDidUpdateListOptions(list.options);
+		this.updateOptions(list.options);
 	}
 
-	private onDidUpdateListOptions(options: IListOptions<T>): void {
+	updateOptions(options: IListOptions<T>): void {
 		const enableKeyboardNavigation = typeof options.enableKeyboardNavigation === 'undefined' ? true : !!options.enableKeyboardNavigation;
 
 		if (enableKeyboardNavigation) {
@@ -354,6 +360,14 @@ class TypeLabelController<T> implements IDisposable {
 		} else {
 			this.disable();
 		}
+
+		if (typeof options.automaticKeyboardNavigation !== 'undefined') {
+			this.automaticKeyboardNavigation = options.automaticKeyboardNavigation;
+		}
+	}
+
+	toggle(): void {
+		this.triggered = !this.triggered;
 	}
 
 	private enable(): void {
@@ -363,6 +377,7 @@ class TypeLabelController<T> implements IDisposable {
 
 		const onChar = Event.chain(domEvent(this.view.domNode, 'keydown'))
 			.filter(e => !isInputElement(e.target as HTMLElement))
+			.filter(() => this.automaticKeyboardNavigation || this.triggered)
 			.map(event => new StandardKeyboardEvent(event))
 			.filter(this.keyboardNavigationLabelProvider.mightProducePrintableCharacter ? e => this.keyboardNavigationLabelProvider.mightProducePrintableCharacter!(e) : e => mightProducePrintableCharacter(e))
 			.forEach(e => { e.stopPropagation(); e.preventDefault(); })
@@ -375,6 +390,7 @@ class TypeLabelController<T> implements IDisposable {
 		onInput(this.onInput, this, this.enabledDisposables);
 
 		this.enabled = true;
+		this.triggered = false;
 	}
 
 	private disable(): void {
@@ -384,11 +400,13 @@ class TypeLabelController<T> implements IDisposable {
 
 		this.enabledDisposables = dispose(this.enabledDisposables);
 		this.enabled = false;
+		this.triggered = false;
 	}
 
 	private onInput(word: string | null): void {
 		if (!word) {
 			this.state = TypeLabelControllerState.Idle;
+			this.triggered = false;
 			return;
 		}
 
@@ -797,6 +815,7 @@ export interface IListOptions<T> extends IListStyles {
 	readonly identityProvider?: IIdentityProvider<T>;
 	readonly dnd?: IListDragAndDrop<T>;
 	readonly enableKeyboardNavigation?: boolean;
+	readonly automaticKeyboardNavigation?: boolean;
 	readonly keyboardNavigationLabelProvider?: IKeyboardNavigationLabelProvider<T>;
 	readonly ariaRole?: ListAriaRootRole;
 	readonly ariaLabel?: string;
@@ -960,20 +979,20 @@ class PipelineRenderer<T> implements IListRenderer<T, any> {
 		return this.renderers.map(r => r.renderTemplate(container));
 	}
 
-	renderElement(element: T, index: number, templateData: any[]): void {
+	renderElement(element: T, index: number, templateData: any[], dynamicHeightProbing?: boolean): void {
 		let i = 0;
 
 		for (const renderer of this.renderers) {
-			renderer.renderElement(element, index, templateData[i++]);
+			renderer.renderElement(element, index, templateData[i++], dynamicHeightProbing);
 		}
 	}
 
-	disposeElement(element: T, index: number, templateData: any[]): void {
+	disposeElement(element: T, index: number, templateData: any[], dynamicHeightProbing?: boolean): void {
 		let i = 0;
 
 		for (const renderer of this.renderers) {
 			if (renderer.disposeElement) {
-				renderer.disposeElement(element, index, templateData[i]);
+				renderer.disposeElement(element, index, templateData[i], dynamicHeightProbing);
 			}
 
 			i += 1;
@@ -1061,6 +1080,7 @@ class ListViewDragAndDrop<T> implements IListViewDragAndDrop<T> {
 
 export interface IListOptionsUpdate {
 	readonly enableKeyboardNavigation?: boolean;
+	readonly automaticKeyboardNavigation?: boolean;
 }
 
 export class List<T> implements ISpliceable<T>, IDisposable {
@@ -1072,9 +1092,7 @@ export class List<T> implements ISpliceable<T>, IDisposable {
 	private spliceable: ISpliceable<T>;
 	private styleElement: HTMLStyleElement;
 	private styleController: IStyleController;
-
-	private _onDidUpdateOptions = new Emitter<IListOptions<T>>();
-	readonly onDidUpdateOptions = this._onDidUpdateOptions.event;
+	private typeLabelController?: TypeLabelController<T>;
 
 	protected disposables: IDisposable[];
 
@@ -1094,7 +1112,7 @@ export class List<T> implements ISpliceable<T>, IDisposable {
 		return Event.map(this._onPin.event, indexes => this.toListEvent({ indexes }));
 	}
 
-	get onDidScroll(): Event<void> { return this.view.onDidScroll; }
+	get onDidScroll(): Event<ScrollEvent> { return this.view.onDidScroll; }
 	get onMouseClick(): Event<IListMouseEvent<T>> { return this.view.onMouseClick; }
 	get onMouseDblClick(): Event<IListMouseEvent<T>> { return this.view.onMouseDblClick; }
 	get onMouseMiddleClick(): Event<IListMouseEvent<T>> { return this.view.onMouseMiddleClick; }
@@ -1112,13 +1130,7 @@ export class List<T> implements ISpliceable<T>, IDisposable {
 			.map(e => new StandardKeyboardEvent(e))
 			.filter(e => this.didJustPressContextMenuKey = e.keyCode === KeyCode.ContextMenu || (e.shiftKey && e.keyCode === KeyCode.F10))
 			.filter(e => { e.preventDefault(); e.stopPropagation(); return false; })
-			.map(event => {
-				const index = this.getFocus()[0];
-				const element = this.view.element(index);
-				const anchor = this.view.domElement(index) || undefined;
-				return { index, element, anchor, browserEvent: event.browserEvent };
-			})
-			.event;
+			.event as Event<any>;
 
 		const fromKeyup = Event.chain(domEvent(this.view.domNode, 'keyup'))
 			.filter(() => {
@@ -1126,14 +1138,13 @@ export class List<T> implements ISpliceable<T>, IDisposable {
 				this.didJustPressContextMenuKey = false;
 				return didJustPressContextMenuKey;
 			})
-			.filter(() => this.getFocus().length > 0)
+			.filter(() => this.getFocus().length > 0 && !!this.view.domElement(this.getFocus()[0]))
 			.map(browserEvent => {
 				const index = this.getFocus()[0];
 				const element = this.view.element(index);
-				const anchor = this.view.domElement(index) || undefined;
+				const anchor = this.view.domElement(index) as HTMLElement;
 				return { index, element, anchor, browserEvent };
 			})
-			.filter(({ anchor }) => !!anchor)
 			.event;
 
 		const fromMouse = Event.chain(this.view.onContextMenu)
@@ -1209,8 +1220,8 @@ export class List<T> implements ISpliceable<T>, IDisposable {
 		}
 
 		if (_options.keyboardNavigationLabelProvider) {
-			const controller = new TypeLabelController(this, this.view, _options.keyboardNavigationLabelProvider);
-			this.disposables.push(controller);
+			this.typeLabelController = new TypeLabelController(this, this.view, _options.keyboardNavigationLabelProvider);
+			this.disposables.push(this.typeLabelController);
 		}
 
 		this.disposables.push(this.createMouseController(_options));
@@ -1231,7 +1242,10 @@ export class List<T> implements ISpliceable<T>, IDisposable {
 
 	updateOptions(optionsUpdate: IListOptionsUpdate = {}): void {
 		this._options = { ...this._options, ...optionsUpdate };
-		this._onDidUpdateOptions.fire(this._options);
+
+		if (this.typeLabelController) {
+			this.typeLabelController.updateOptions(this._options);
+		}
 	}
 
 	get options(): IListOptions<T> {
@@ -1256,6 +1270,10 @@ export class List<T> implements ISpliceable<T>, IDisposable {
 
 	updateWidth(index: number): void {
 		this.view.updateWidth(index);
+	}
+
+	rerender(): void {
+		this.view.rerender();
 	}
 
 	element(index: number): T {
@@ -1290,12 +1308,26 @@ export class List<T> implements ISpliceable<T>, IDisposable {
 		return this.view.renderHeight;
 	}
 
+	get firstVisibleIndex(): number {
+		return this.view.firstVisibleIndex;
+	}
+
+	get lastVisibleIndex(): number {
+		return this.view.lastVisibleIndex;
+	}
+
 	domFocus(): void {
 		this.view.domNode.focus();
 	}
 
 	layout(height?: number, width?: number): void {
 		this.view.layout(height, width);
+	}
+
+	toggleKeyboardNavigation(): void {
+		if (this.typeLabelController) {
+			this.typeLabelController.toggle();
+		}
 	}
 
 	setSelection(indexes: number[], browserEvent?: UIEvent): void {
@@ -1305,7 +1337,6 @@ export class List<T> implements ISpliceable<T>, IDisposable {
 			}
 		}
 
-		indexes = indexes.sort(numericSort);
 		this.selection.set(indexes, browserEvent);
 	}
 
@@ -1324,7 +1355,6 @@ export class List<T> implements ISpliceable<T>, IDisposable {
 			}
 		}
 
-		indexes = indexes.sort(numericSort);
 		this.focus.set(indexes, browserEvent);
 	}
 

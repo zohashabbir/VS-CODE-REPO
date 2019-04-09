@@ -18,14 +18,13 @@ import { isEqual } from 'vs/base/common/resources';
 import { isLinux, isMacintosh } from 'vs/base/common/platform';
 import { LifecyclePhase } from 'vs/platform/lifecycle/common/lifecycle';
 import { IDialogService } from 'vs/platform/dialogs/common/dialogs';
-import { equals } from 'vs/base/common/objects';
+import { IWorkbenchEnvironmentService } from 'vs/workbench/services/environment/common/environmentService';
 
 interface IConfiguration extends IWindowsConfiguration {
-	update: { channel: string; };
+	update: { mode: string; };
 	telemetry: { enableCrashReporter: boolean };
 	keyboard: { touchbar: { enabled: boolean } };
-	workbench: { tree: { horizontalScrolling: boolean }, useExperimentalGridLayout: boolean };
-	files: { useExperimentalFileWatcher: boolean, watcherExclude: object };
+	workbench: { list: { horizontalScrolling: boolean }, useExperimentalGridLayout: boolean };
 }
 
 export class SettingsChangeRelauncher extends Disposable implements IWorkbenchContribution {
@@ -34,12 +33,10 @@ export class SettingsChangeRelauncher extends Disposable implements IWorkbenchCo
 	private nativeTabs: boolean;
 	private nativeFullScreen: boolean;
 	private clickThroughInactive: boolean;
-	private updateChannel: string;
+	private updateMode: string;
 	private enableCrashReporter: boolean;
 	private touchbarEnabled: boolean;
 	private treeHorizontalScrolling: boolean;
-	private experimentalFileWatcher: boolean;
-	private fileWatcherExclude: object;
 	private useGridLayout: boolean;
 
 	constructor(
@@ -47,8 +44,7 @@ export class SettingsChangeRelauncher extends Disposable implements IWorkbenchCo
 		@IWindowService private readonly windowService: IWindowService,
 		@IConfigurationService private readonly configurationService: IConfigurationService,
 		@IEnvironmentService private readonly envService: IEnvironmentService,
-		@IDialogService private readonly dialogService: IDialogService,
-		@IWorkspaceContextService private readonly contextService: IWorkspaceContextService,
+		@IDialogService private readonly dialogService: IDialogService
 	) {
 		super();
 
@@ -84,8 +80,8 @@ export class SettingsChangeRelauncher extends Disposable implements IWorkbenchCo
 		}
 
 		// Update channel
-		if (config.update && typeof config.update.channel === 'string' && config.update.channel !== this.updateChannel) {
-			this.updateChannel = config.update.channel;
+		if (config.update && typeof config.update.mode === 'string' && config.update.mode !== this.updateMode) {
+			this.updateMode = config.update.mode;
 			changed = true;
 		}
 
@@ -95,20 +91,6 @@ export class SettingsChangeRelauncher extends Disposable implements IWorkbenchCo
 			changed = true;
 		}
 
-		// Experimental File Watcher
-		if (config.files && typeof config.files.useExperimentalFileWatcher === 'boolean' && config.files.useExperimentalFileWatcher !== this.experimentalFileWatcher) {
-			this.experimentalFileWatcher = config.files.useExperimentalFileWatcher;
-			changed = true;
-		}
-
-		// File Watcher Excludes (only if in folder workspace mode)
-		if (!this.experimentalFileWatcher && this.contextService.getWorkbenchState() === WorkbenchState.FOLDER) {
-			if (config.files && typeof config.files.watcherExclude === 'object' && !equals(config.files.watcherExclude, this.fileWatcherExclude)) {
-				this.fileWatcherExclude = config.files.watcherExclude;
-				changed = true;
-			}
-		}
-
 		// macOS: Touchbar config
 		if (isMacintosh && config.keyboard && config.keyboard.touchbar && typeof config.keyboard.touchbar.enabled === 'boolean' && config.keyboard.touchbar.enabled !== this.touchbarEnabled) {
 			this.touchbarEnabled = config.keyboard.touchbar.enabled;
@@ -116,8 +98,8 @@ export class SettingsChangeRelauncher extends Disposable implements IWorkbenchCo
 		}
 
 		// Tree horizontal scrolling support
-		if (config.workbench && config.workbench.tree && typeof config.workbench.tree.horizontalScrolling === 'boolean' && config.workbench.tree.horizontalScrolling !== this.treeHorizontalScrolling) {
-			this.treeHorizontalScrolling = config.workbench.tree.horizontalScrolling;
+		if (config.workbench && config.workbench.list && typeof config.workbench.list.horizontalScrolling === 'boolean' && config.workbench.list.horizontalScrolling !== this.treeHorizontalScrolling) {
+			this.treeHorizontalScrolling = config.workbench.list.horizontalScrolling;
 			changed = true;
 		}
 
@@ -163,15 +145,26 @@ export class WorkspaceChangeExtHostRelauncher extends Disposable implements IWor
 	private firstFolderResource?: URI;
 	private extensionHostRestarter: RunOnceScheduler;
 
-	private onDidChangeWorkspaceFoldersUnbind: IDisposable;
+	private onDidChangeWorkspaceFoldersUnbind: IDisposable | undefined;
 
 	constructor(
 		@IWorkspaceContextService private readonly contextService: IWorkspaceContextService,
-		@IExtensionService extensionService: IExtensionService
+		@IExtensionService extensionService: IExtensionService,
+		@IWindowService windowSevice: IWindowService,
+		@IWorkbenchEnvironmentService environmentService: IWorkbenchEnvironmentService
 	) {
 		super();
 
-		this.extensionHostRestarter = this._register(new RunOnceScheduler(() => extensionService.restartExtensionHost(), 10));
+		this.extensionHostRestarter = this._register(new RunOnceScheduler(() => {
+			if (!!environmentService.extensionTestsLocationURI) {
+				return; // no restart when in tests: see https://github.com/Microsoft/vscode/issues/66936
+			}
+			if (environmentService.configuration.remoteAuthority) {
+				windowSevice.reloadWindow(); // TODO aeschli, workaround
+			} else {
+				extensionService.restartExtensionHost();
+			}
+		}, 10));
 
 		this.contextService.getCompleteWorkspace()
 			.then(workspace => {
@@ -204,7 +197,8 @@ export class WorkspaceChangeExtHostRelauncher extends Disposable implements IWor
 
 		// Ignore the workspace folder changes in EMPTY or FOLDER state
 		else {
-			this.onDidChangeWorkspaceFoldersUnbind = dispose(this.onDidChangeWorkspaceFoldersUnbind);
+			dispose(this.onDidChangeWorkspaceFoldersUnbind);
+			this.onDidChangeWorkspaceFoldersUnbind = undefined;
 		}
 	}
 

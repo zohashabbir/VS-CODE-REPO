@@ -4,11 +4,9 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { URI } from 'vs/base/common/uri';
-import * as extpath from 'vs/base/common/extpath';
 import * as objects from 'vs/base/common/objects';
 import { Event, Emitter } from 'vs/base/common/event';
-import { relative } from 'vs/base/common/path';
-import { basename, extname } from 'vs/base/common/resources';
+import { basename, extname, relativePath } from 'vs/base/common/resources';
 import { RawContextKey, IContextKeyService, IContextKey } from 'vs/platform/contextkey/common/contextkey';
 import { IModeService } from 'vs/editor/common/services/modeService';
 import { IFileService } from 'vs/platform/files/common/files';
@@ -16,6 +14,7 @@ import { Disposable } from 'vs/base/common/lifecycle';
 import { ParsedExpression, IExpression, parse } from 'vs/base/common/glob';
 import { IWorkspaceContextService } from 'vs/platform/workspace/common/workspace';
 import { IConfigurationService, IConfigurationChangeEvent } from 'vs/platform/configuration/common/configuration';
+import { withNullAsUndefined } from 'vs/base/common/types';
 
 export class ResourceContextKey extends Disposable implements IContextKey<URI> {
 
@@ -27,11 +26,11 @@ export class ResourceContextKey extends Disposable implements IContextKey<URI> {
 	static HasResource = new RawContextKey<boolean>('resourceSet', false);
 	static IsFileSystemResource = new RawContextKey<boolean>('isFileSystemResource', false);
 
-	private readonly _resourceKey: IContextKey<URI>;
-	private readonly _schemeKey: IContextKey<string>;
-	private readonly _filenameKey: IContextKey<string>;
+	private readonly _resourceKey: IContextKey<URI | null>;
+	private readonly _schemeKey: IContextKey<string | null>;
+	private readonly _filenameKey: IContextKey<string | null>;
 	private readonly _langIdKey: IContextKey<string | null>;
-	private readonly _extensionKey: IContextKey<string>;
+	private readonly _extensionKey: IContextKey<string | null>;
 	private readonly _hasResource: IContextKey<boolean>;
 	private readonly _isFileSystemResource: IContextKey<boolean>;
 
@@ -61,15 +60,15 @@ export class ResourceContextKey extends Disposable implements IContextKey<URI> {
 		}));
 	}
 
-	set(value: URI) {
+	set(value: URI | null) {
 		if (!ResourceContextKey._uriEquals(this._resourceKey.get(), value)) {
 			this._resourceKey.set(value);
-			this._schemeKey.set(value && value.scheme);
-			this._filenameKey.set(value && basename(value));
+			this._schemeKey.set(value ? value.scheme : null);
+			this._filenameKey.set(value ? basename(value) : null);
 			this._langIdKey.set(value ? this._modeService.getModeIdByFilepathOrFirstLine(value.fsPath) : null);
-			this._extensionKey.set(value && extname(value));
+			this._extensionKey.set(value ? extname(value) : null);
 			this._hasResource.set(!!value);
-			this._isFileSystemResource.set(value && this._fileService.canHandleResource(value));
+			this._isFileSystemResource.set(value ? this._fileService.canHandleResource(value) : false);
 		}
 	}
 
@@ -84,7 +83,7 @@ export class ResourceContextKey extends Disposable implements IContextKey<URI> {
 	}
 
 	get(): URI | undefined {
-		return this._resourceKey.get();
+		return withNullAsUndefined(this._resourceKey.get());
 	}
 
 	private static _uriEquals(a: URI | undefined | null, b: URI | undefined | null): boolean {
@@ -110,8 +109,8 @@ export class ResourceGlobMatcher extends Disposable {
 	private readonly _onExpressionChange: Emitter<void> = this._register(new Emitter<void>());
 	get onExpressionChange(): Event<void> { return this._onExpressionChange.event; }
 
-	private mapRootToParsedExpression: Map<string | null, ParsedExpression>;
-	private mapRootToExpressionConfig: Map<string | null, IExpression>;
+	private readonly mapRootToParsedExpression: Map<string | null, ParsedExpression> = new Map<string, ParsedExpression>();
+	private readonly mapRootToExpressionConfig: Map<string | null, IExpression> = new Map<string, IExpression>();
 
 	constructor(
 		private globFn: (root?: URI) => IExpression,
@@ -120,9 +119,6 @@ export class ResourceGlobMatcher extends Disposable {
 		@IConfigurationService private readonly configurationService: IConfigurationService
 	) {
 		super();
-
-		this.mapRootToParsedExpression = new Map<string, ParsedExpression>();
-		this.mapRootToExpressionConfig = new Map<string, IExpression>();
 
 		this.updateExcludes(false);
 
@@ -197,9 +193,9 @@ export class ResourceGlobMatcher extends Disposable {
 		// but can match on "src/file.txt"
 		let resourcePathToMatch: string;
 		if (folder) {
-			resourcePathToMatch = extpath.normalize(relative(folder.uri.fsPath, resource.fsPath));
+			resourcePathToMatch = relativePath(folder.uri, resource)!; // always uses forward slashes
 		} else {
-			resourcePathToMatch = resource.fsPath;
+			resourcePathToMatch = resource.fsPath; // TODO@isidor: support non-file URIs
 		}
 
 		return !!expressionForRoot(resourcePathToMatch);
