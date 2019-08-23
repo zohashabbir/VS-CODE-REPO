@@ -965,6 +965,12 @@ const editorConfiguration: IConfigurationNode = {
 			'default': EDITOR_DEFAULTS.contribInfo.showFoldingControls,
 			'description': nls.localize('showFoldingControls', "Controls whether the fold controls on the gutter are automatically hidden.")
 		},
+		'editor.foldingControls': {
+			'type': 'string',
+			'enum': ['classic', 'top-bottom'],
+			'default': EDITOR_DEFAULTS.contribInfo.foldingControls,
+			'description': nls.localize('foldingControls', "Controls the style of folding controls shown when folding is enabled.")
+		},
 		'editor.matchBrackets': {
 			'type': 'boolean',
 			'default': EDITOR_DEFAULTS.contribInfo.matchBrackets,

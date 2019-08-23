@@ -59,6 +59,7 @@ export class FoldingController extends Disposable implements IEditorContribution
 
 	private readonly editor: ICodeEditor;
 	private _isEnabled: boolean;
+	private _isFoldFromEndEnabled: boolean;
 	private _autoHideFoldingControls: boolean;
 	private _useFoldingProviders: boolean;
 
@@ -88,6 +89,7 @@ export class FoldingController extends Disposable implements IEditorContribution
 		super();
 		this.editor = editor;
 		this._isEnabled = this.editor.getConfiguration().contribInfo.folding;
+		this._isFoldFromEndEnabled = this.editor.getConfiguration().contribInfo.foldingControls === 'top-bottom';
 		this._autoHideFoldingControls = this.editor.getConfiguration().contribInfo.showFoldingControls === 'mouseover';
 		this._useFoldingProviders = this.editor.getConfiguration().contribInfo.foldingStrategy !== 'indentation';
 
@@ -114,6 +116,11 @@ export class FoldingController extends Disposable implements IEditorContribution
 				this._isEnabled = this.editor.getConfiguration().contribInfo.folding;
 				this.foldingEnabled.set(this._isEnabled);
 				if (oldIsEnabled !== this._isEnabled) {
+					this.onModelChanged();
+				}
+				let oldIsFoldFromEndEnabled = this._isFoldFromEndEnabled;
+				this._isFoldFromEndEnabled = this.editor.getConfiguration().contribInfo.foldingControls === 'top-bottom';
+				if (oldIsFoldFromEndEnabled !== this._isFoldFromEndEnabled) {
 					this.onModelChanged();
 				}
 				let oldShowFoldingControls = this._autoHideFoldingControls;
@@ -192,7 +199,7 @@ export class FoldingController extends Disposable implements IEditorContribution
 			return;
 		}
 
-		this.foldingModel = new FoldingModel(model, this.foldingDecorationProvider);
+		this.foldingModel = new FoldingModel(model, this.foldingDecorationProvider, this._isFoldFromEndEnabled);
 		this.localToDispose.add(this.foldingModel);
 
 		this.hiddenRangeModel = new HiddenRangeModel(this.foldingModel);
@@ -420,15 +427,29 @@ export class FoldingController extends Disposable implements IEditorContribution
 		foldingModel.then(foldingModel => {
 			if (foldingModel) {
 				let region = foldingModel.getRegionAtLine(lineNumber);
-				if (region && region.startLineNumber === lineNumber) {
+				let isEnd = false;
+
+				if (this._isFoldFromEndEnabled && ((region && region.startLineNumber !== lineNumber) || region === null)) {
+					lineNumber -= 1;
+					region = foldingModel.getTopEndRegionAtLine(lineNumber);
+
+					isEnd = region !== null && (region.endLineNumber === lineNumber);
+				}
+
+				if (region && (region.startLineNumber === lineNumber || isEnd)) {
 					let isCollapsed = region.isCollapsed;
+
+					if (isCollapsed && isEnd) {
+						return;
+					}
+
 					if (iconClicked || isCollapsed) {
 						let toToggle = [region];
 						if (e.event.middleButton || e.event.shiftKey) {
 							toToggle.push(...foldingModel.getRegionsInside(region, r => r.isCollapsed === isCollapsed));
 						}
 						foldingModel.toggleCollapseState(toToggle);
-						this.reveal({ lineNumber, column: 1 });
+						this.reveal({ lineNumber: region.startLineNumber, column: 1 });
 					}
 				}
 			}

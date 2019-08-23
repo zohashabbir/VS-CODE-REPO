@@ -661,6 +661,11 @@ export interface IEditorOptions {
 	 */
 	showFoldingControls?: 'always' | 'mouseover';
 	/**
+	 * Controls the style of folding controls shown when folding is enabled.
+	 * Defaults to 'classic'.
+	 */
+	foldingControls?: 'classic' | 'top-bottom';
+	/**
 	 * Enable highlighting of matching brackets.
 	 * Defaults to true.
 	 */
@@ -1042,6 +1047,7 @@ export interface EditorContribOptions {
 	readonly folding: boolean;
 	readonly foldingStrategy: 'auto' | 'indentation';
 	readonly showFoldingControls: 'always' | 'mouseover';
+	readonly foldingControls: 'classic' | 'top-bottom';
 	readonly matchBrackets: boolean;
 	readonly find: InternalEditorFindOptions;
 	readonly colorDecorators: boolean;
@@ -1470,6 +1476,7 @@ export class InternalEditorOptions {
 			&& a.folding === b.folding
 			&& a.foldingStrategy === b.foldingStrategy
 			&& a.showFoldingControls === b.showFoldingControls
+			&& a.foldingControls === b.foldingControls
 			&& a.matchBrackets === b.matchBrackets
 			&& this._equalFindOptions(a.find, b.find)
 			&& a.colorDecorators === b.colorDecorators
@@ -2126,6 +2133,7 @@ export class EditorOptionsValidator {
 			folding: _boolean(opts.folding, defaults.folding),
 			foldingStrategy: _stringSet<'auto' | 'indentation'>(opts.foldingStrategy, defaults.foldingStrategy, ['auto', 'indentation']),
 			showFoldingControls: _stringSet<'always' | 'mouseover'>(opts.showFoldingControls, defaults.showFoldingControls, ['always', 'mouseover']),
+			foldingControls: _stringSet<'classic' | 'top-bottom'>(opts.foldingControls, defaults.foldingControls, ['classic', 'top-bottom']),
 			matchBrackets: _boolean(opts.matchBrackets, defaults.matchBrackets),
 			find: find,
 			colorDecorators: _boolean(opts.colorDecorators, defaults.colorDecorators),
@@ -2241,6 +2249,7 @@ export class InternalEditorOptionsFactory {
 				folding: (accessibilityIsOn ? false : opts.contribInfo.folding), // DISABLED WHEN SCREEN READER IS ATTACHED
 				foldingStrategy: opts.contribInfo.foldingStrategy,
 				showFoldingControls: opts.contribInfo.showFoldingControls,
+				foldingControls: opts.contribInfo.foldingControls,
 				matchBrackets: (accessibilityIsOn ? false : opts.contribInfo.matchBrackets), // DISABLED WHEN SCREEN READER IS ATTACHED
 				find: opts.contribInfo.find,
 				colorDecorators: opts.contribInfo.colorDecorators,
@@ -2738,6 +2747,7 @@ export const EDITOR_DEFAULTS: IValidatedEditorOptions = {
 		folding: true,
 		foldingStrategy: 'auto',
 		showFoldingControls: 'mouseover',
+		foldingControls: 'classic',
 		matchBrackets: true,
 		find: {
 			seedSearchStringFromSelection: true,
