@@ -112,18 +112,74 @@ abstract class AbstractMoveLinesAction extends EditorAction {
 		let commands: ICommand[] = [];
 		let selections = editor.getSelections() || [];
 		let autoIndent = editor.getConfiguration().autoIndent;
+		let movingMultipleLines = false;
+		let selectionDirectionDown = true;
+		let newSelections: Selection[] = [];
 
-		for (const selection of selections) {
-			commands.push(new MoveLinesCommand(selection, this.down, autoIndent));
+		if (selections.length > 1) {
+			movingMultipleLines = selections[0].endLineNumber !== selections[selections.length - 1].endLineNumber;
+
+			if (movingMultipleLines) {
+				// Stash selections while processing, set new selections +/- line-change only
+				for (const selection of selections) {
+					let startCol = selection.getStartPosition().column;
+					let startLine = selection.getStartPosition().lineNumber;
+					let newStartLine = this.down ? startLine + 1 : startLine - 1;
+
+					let endCol = selection.getEndPosition().column;
+					let endLine = selection.getEndPosition().lineNumber;
+					let newEndLine = this.down ? endLine + 1 : endLine - 1;
+
+					newSelections.push(new Selection(newStartLine, startCol, newEndLine, endCol));
+				}
+
+				// Work only with one selection per line
+				selections = selections.filter((s, idx, arr) => {
+					return arr.map(sel => sel['endLineNumber']).indexOf(s['endLineNumber']) === idx;
+				});
+
+				selectionDirectionDown = selections[0].endLineNumber < selections[selections.length - 1].endLineNumber;
+
+				editor.pushUndoStop();
+
+				if (selectionDirectionDown === this.down) {
+					selections.reverse();
+				}
+			}
 		}
 
-		editor.pushUndoStop();
-		editor.executeCommands(this.id, commands);
-		editor.pushUndoStop();
+		for (const selection of selections) {
+			if (movingMultipleLines) {
+				// If we are at the beginning/end of document and multiple lines are moved, abort.
+				let model = editor.getModel();
+				let lineCount = model !== null ? model.getLineCount() : 0;
+
+				if ((selection.startLineNumber === 1 && !this.down) || (selection.endLineNumber === lineCount && this.down)) {
+					editor.pushUndoStop();
+					return;
+				}
+
+				editor.executeCommand(this.id, new MoveLinesCommand(selection, this.down, autoIndent));
+			} else {
+				commands.push(new MoveLinesCommand(selection, this.down, autoIndent));
+			}
+		}
+
+		if (movingMultipleLines) {
+			if (newSelections.length > 1) {
+				editor.setSelections(newSelections);
+			}
+
+			editor.pushUndoStop();
+		} else {
+			editor.pushUndoStop();
+			editor.executeCommands(this.id, commands);
+			editor.pushUndoStop();
+		}
 	}
 }
 
-class MoveLinesUpAction extends AbstractMoveLinesAction {
+export class MoveLinesUpAction extends AbstractMoveLinesAction {
 	constructor() {
 		super(false, {
 			id: 'editor.action.moveLinesUpAction',
@@ -146,7 +202,7 @@ class MoveLinesUpAction extends AbstractMoveLinesAction {
 	}
 }
 
-class MoveLinesDownAction extends AbstractMoveLinesAction {
+export class MoveLinesDownAction extends AbstractMoveLinesAction {
 	constructor() {
 		super(true, {
 			id: 'editor.action.moveLinesDownAction',
