@@ -46,6 +46,10 @@ interface Settings {
 	json?: {
 		schemas?: JSONSchemaSettings[];
 		format?: { enable: boolean; };
+		schemaStore?: { 
+			enable: boolean;
+			disabledFileMatches: string[];
+		};
 	};
 	http?: {
 		proxy?: string;
@@ -320,6 +324,7 @@ function getSettings(): Settings {
 		},
 		json: {
 			schemas: [],
+			schemaStore: workspace.getConfiguration('json').get('schemaStore')
 		}
 	};
 	let schemaSettingsById: { [schemaId: string]: JSONSchemaSettings } = Object.create(null);
