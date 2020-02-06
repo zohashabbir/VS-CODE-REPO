@@ -320,6 +320,11 @@ export interface IEditorOptions {
 	 */
 	fastScrollSensitivity?: number;
 	/**
+	 * FastScrolling key
+	 * Defaults to 'Alt'.
+	 */
+	fastScrollKey?: 'ctrl' | 'alt' | 'shift';
+	/**
 	 * The modifier to be used to add multiple cursors with the mouse.
 	 * Defaults to 'alt'
 	 */
@@ -3138,6 +3143,7 @@ export const enum EditorOption {
 	dragAndDrop,
 	emptySelectionClipboard,
 	extraEditorClassName,
+	fastScrollKey,
 	fastScrollSensitivity,
 	find,
 	fixedOverflowWidgets,
@@ -3407,6 +3413,12 @@ export const EditorOptions = {
 	emptySelectionClipboard: register(new EditorEmptySelectionClipboard()),
 	extraEditorClassName: register(new EditorStringOption(
 		EditorOption.extraEditorClassName, 'extraEditorClassName', '',
+	)),
+	fastScrollKey: register(new EditorStringEnumOption(
+		EditorOption.fastScrollKey, 'fastScrollKey',
+		'alt' as 'ctrl' | 'alt' | 'shift',
+		['ctrl', 'alt', 'shift'] as const,
+		{ markdownDescription: nls.localize('fastScrollKey', "Key that activates `Fast Scroll` when pressed") }
 	)),
 	fastScrollSensitivity: register(new EditorFloatOption(
 		EditorOption.fastScrollSensitivity, 'fastScrollSensitivity',
