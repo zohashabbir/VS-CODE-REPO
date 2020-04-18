@@ -34,7 +34,7 @@ import { ThemeIcon } from 'vs/platform/theme/common/themeService';
 const category = { value: nls.localize('filesCategory', "File"), original: 'File' };
 
 const registry = Registry.as<IWorkbenchActionRegistry>(ActionExtensions.WorkbenchActions);
-registry.registerWorkbenchAction(SyncActionDescriptor.create(SaveAllAction, SaveAllAction.ID, SaveAllAction.LABEL, { primary: undefined, mac: { primary: KeyMod.CtrlCmd | KeyMod.Alt | KeyCode.KEY_S }, win: { primary: KeyChord(KeyMod.CtrlCmd | KeyCode.KEY_K, KeyCode.KEY_S) } }), 'File: Save All', category.value);
+registry.registerWorkbenchAction(SyncActionDescriptor.create(SaveAllAction, SaveAllAction.ID, SaveAllAction.LABEL, { primary: KeyMod.CtrlCmd | KeyMod.Alt | KeyCode.KEY_S, win: { primary: KeyChord(KeyMod.CtrlCmd | KeyCode.KEY_K, KeyCode.KEY_S) } }), 'File: Save All', category.value);
 registry.registerWorkbenchAction(SyncActionDescriptor.create(GlobalCompareResourcesAction, GlobalCompareResourcesAction.ID, GlobalCompareResourcesAction.LABEL), 'File: Compare Active File With...', category.value);
 registry.registerWorkbenchAction(SyncActionDescriptor.create(ReopenResourcesAction, ReopenResourcesAction.ID, ReopenResourcesAction.LABEL), 'File: Reopen With...', category.value);
 registry.registerWorkbenchAction(SyncActionDescriptor.create(FocusFilesExplorer, FocusFilesExplorer.ID, FocusFilesExplorer.LABEL), 'File: Focus on Files Explorer', category.value);
