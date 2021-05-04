@@ -15,9 +15,11 @@ import * as languageModeIds from '../utils/languageModeIds';
 const jsTsLanguageConfiguration: vscode.LanguageConfiguration = {
 	indentationRules: {
 		decreaseIndentPattern: /^((?!.*?\/\*).*\*\/)?\s*[\}\]].*$/,
-		increaseIndentPattern: /^((?!\/\/).)*(\{([^}"'`]*|(\t|[ ])*\/\/.*)|\([^)"'`]*|\[[^\]"'`]*)$/,
+		increaseIndentPattern: /^((?!\/\/).)*(\{([^}"'`]*|(\t| )*\/\/.*)|\([^)"'`]*|\[[^\]"'`]*)$|^\s*(case\s.+:|default\s*:)$/,
+		indentNextLinePattern: /^\s*(else|((else )?if|for|while) *\(.*\))$/,
+		decreaseIndentWithPreviousLinePattern: /^((\s*(else|((else )?if|for|while) *\(.*\)))|(\s*(case\s.+:|default\s*:)))\s*\r?\n\s*\{$/,
 		// e.g.  * ...| or */| or *-----*/|
-		unIndentedLinePattern: /^(\t|[ ])*[ ]\*[^/]*\*\/\s*$|^(\t|[ ])*[ ]\*\/\s*$|^(\t|[ ])*[ ]\*([ ]([^\*]|\*(?!\/))*)?$/
+		unIndentedLinePattern: /^(\t|[ ])*[ ]\*[^/]*\*\/\s*$|^(\t|[ ])*[ ]\*\/\s*$|^(\t|[ ])*[ ]\*([ ]([^\*]|\*(?!\/))*)?$/,
 	},
 	wordPattern: /(-?\d*\.\d\w*)|([^\`\~\!\@\%\^\&\*\(\)\-\=\+\[\{\]\}\\\|\;\:\'\"\,\.\<\>\/\?\s]+)/g,
 	onEnterRules: [
@@ -46,10 +48,9 @@ const jsTsLanguageConfiguration: vscode.LanguageConfiguration = {
 			action: { indentAction: vscode.IndentAction.None, removeText: 1 },
 		},
 		{
-			beforeText: /^\s*(\bcase\s.+:|\bdefault:)$/,
-			afterText: /^(?!\s*(\bcase\b|\bdefault\b))/,
-			action: { indentAction: vscode.IndentAction.Indent },
-		}
+			beforeText: /^\s*break;?$/,
+			action: { indentAction: vscode.IndentAction.Outdent },
+		},
 	]
 };
 
