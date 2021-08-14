@@ -1119,6 +1119,11 @@ declare namespace monaco.editor {
 		 */
 		trimAutoWhitespace?: boolean;
 		/**
+		 * Remove any trailing whitespace.
+		 * Defaults to true.
+		 */
+		trimTrailingWhitespace?: boolean;
+		/**
 		 * Special handling for large files to disable certain memory intensive features.
 		 * Defaults to true.
 		 */
@@ -1638,6 +1643,7 @@ declare namespace monaco.editor {
 		readonly insertSpaces: boolean;
 		readonly defaultEOL: DefaultEndOfLine;
 		readonly trimAutoWhitespace: boolean;
+		readonly trimTrailingWhitespace: boolean;
 	}
 
 	export interface ITextModelUpdateOptions {
@@ -1645,6 +1651,7 @@ declare namespace monaco.editor {
 		indentSize?: number;
 		insertSpaces?: boolean;
 		trimAutoWhitespace?: boolean;
+		trimTrailingWhitespace?: boolean;
 	}
 
 	export class FindMatch {
@@ -2536,6 +2543,7 @@ declare namespace monaco.editor {
 		readonly indentSize: boolean;
 		readonly insertSpaces: boolean;
 		readonly trimAutoWhitespace: boolean;
+		readonly trimTrailingWhitespace: boolean;
 	}
 
 	/**

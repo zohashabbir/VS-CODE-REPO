@@ -3896,6 +3896,7 @@ export const EDITOR_MODEL_DEFAULTS = {
 	insertSpaces: true,
 	detectIndentation: true,
 	trimAutoWhitespace: true,
+	trimTrailingWhitespace: true,
 	largeFileOptimizations: true
 };
 
