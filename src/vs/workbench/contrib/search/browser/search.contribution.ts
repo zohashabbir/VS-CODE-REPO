@@ -55,6 +55,7 @@ import { LifecyclePhase } from 'vs/workbench/services/lifecycle/common/lifecycle
 import { IPaneCompositePartService } from 'vs/workbench/services/panecomposite/browser/panecomposite';
 import { ISearchConfiguration, SearchSortOrder, SEARCH_EXCLUDE_CONFIG, VIEWLET_ID, ViewMode, VIEW_ID } from 'vs/workbench/services/search/common/search';
 import { Extensions, IConfigurationMigrationRegistry } from 'vs/workbench/common/configuration';
+import { AnythingQuickAccessWithoutExclusionsProvider } from 'vs/workbench/contrib/search/browser/anythingQuickAccessWithoutExclusions';
 
 registerSingleton(ISearchWorkbenchService, SearchWorkbenchService, InstantiationType.Delayed);
 registerSingleton(ISearchHistoryService, SearchHistoryService, InstantiationType.Delayed);
@@ -950,6 +951,14 @@ quickAccessRegistry.registerQuickAccessProvider({
 	placeholder: nls.localize('anythingQuickAccessPlaceholder', "Search files by name (append {0} to go to line or {1} to go to symbol)", AbstractGotoLineQuickAccessProvider.PREFIX, GotoSymbolQuickAccessProvider.PREFIX),
 	contextKey: defaultQuickAccessContextKeyValue,
 	helpEntries: [{ description: nls.localize('anythingQuickAccess', "Go to File"), commandId: 'workbench.action.quickOpen' }]
+});
+
+quickAccessRegistry.registerQuickAccessProvider({
+	ctor: AnythingQuickAccessWithoutExclusionsProvider,
+	prefix: AnythingQuickAccessWithoutExclusionsProvider.PREFIX,
+	placeholder: nls.localize('anythingQuickAccessWithoutExclusionsPlaceholder', "Search files by name (without ignore files and search excludes)"),
+	contextKey: defaultQuickAccessContextKeyValue,
+	helpEntries: [{ description: nls.localize('anythingQuickAccessWithoutExclusions', "Go to File (without ignore files and search excludes)"), commandId: 'workbench.action.quickOpen' }]
 });
 
 quickAccessRegistry.registerQuickAccessProvider({
