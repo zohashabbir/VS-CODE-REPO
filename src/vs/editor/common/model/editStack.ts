@@ -189,10 +189,12 @@ export class SingleModelEditStackElement implements IResourceUndoRedoElement {
 		return (this.model === model && this._data instanceof SingleModelEditStackData);
 	}
 
-	public append(model: ITextModel, textChanges: TextChange[], afterEOL: EndOfLineSequence, afterVersionId: number, afterCursorState: Selection[] | null): void {
+	public append(model: ITextModel, textChanges: TextChange[], afterEOL: EndOfLineSequence, afterVersionId: number, afterCursorState: Selection[] | null): boolean {
 		if (this._data instanceof SingleModelEditStackData) {
 			this._data.append(model, textChanges, afterEOL, afterVersionId, afterCursorState);
+			return this._data.changes.length !== 0;
 		}
+		return true;
 	}
 
 	public close(): void {
@@ -424,9 +426,9 @@ export class EditStack {
 		editStackElement.append(this._model, [], getModelEOL(this._model), this._model.getAlternativeVersionId(), null);
 	}
 
-	public pushEditOperation(beforeCursorState: Selection[] | null, editOperations: ISingleEditOperation[], cursorStateComputer: ICursorStateComputer | null): Selection[] | null {
+	public pushEditOperation(beforeCursorState: Selection[] | null, editOperations: ISingleEditOperation[], cursorStateComputer: ICursorStateComputer | null, unconfirmed: boolean): Selection[] | null {
 		const editStackElement = this._getOrCreateEditStackElement(beforeCursorState);
-		const inverseEditOperations = this._model.applyEdits(editOperations, true);
+		const inverseEditOperations = this._model.applyEdits(editOperations, true, unconfirmed);
 		const afterCursorState = EditStack._computeCursorState(cursorStateComputer, inverseEditOperations);
 		const textChanges = inverseEditOperations.map((op, index) => ({ index: index, textChange: op.textChange }));
 		textChanges.sort((a, b) => {
@@ -435,7 +437,11 @@ export class EditStack {
 			}
 			return a.textChange.oldPosition - b.textChange.oldPosition;
 		});
-		editStackElement.append(this._model, textChanges.map(op => op.textChange), getModelEOL(this._model), this._model.getAlternativeVersionId(), afterCursorState);
+		const hasEdit = editStackElement.append(this._model, textChanges.map(op => op.textChange), getModelEOL(this._model), this._model.getAlternativeVersionId(), afterCursorState);
+
+		if (!hasEdit) {
+			this._undoRedoService.popLastElement(this._model.uri);
+		}
 		return afterCursorState;
 	}
 
