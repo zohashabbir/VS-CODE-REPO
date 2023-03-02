@@ -5,6 +5,7 @@
 
 import * as dom from 'vs/base/browser/dom';
 import { renderLabelWithIcons } from 'vs/base/browser/ui/iconLabel/iconLabels';
+import { IDisposable } from 'vs/base/common/lifecycle';
 import * as objects from 'vs/base/common/objects';
 
 /**
@@ -24,11 +25,31 @@ export interface IOptions {
 	readonly supportIcons?: boolean;
 }
 
+declare class Highlight {
+	constructor();
+	add(range: AbstractRange): void;
+	delete(highlight: StaticRange): void;
+	clear(): void;
+	priority: number;
+}
+
+interface CSSHighlights {
+	set(rule: string, highlight: Highlight): void;
+	get(rule: string): Highlight | undefined;
+}
+declare namespace CSS {
+	let highlights: CSSHighlights | undefined;
+}
+
+// TODO: figure out where to put this
+const cssHighlight = new Highlight();
+CSS.highlights?.set('label-highlight', cssHighlight);
+
 /**
  * A widget which can render a label with substring highlights, often
  * originating from a filter function like the fuzzy matcher.
  */
-export class HighlightedLabel {
+export class HighlightedLabel implements IDisposable {
 
 	private readonly domNode: HTMLElement;
 	private text: string = '';
@@ -45,6 +66,12 @@ export class HighlightedLabel {
 	constructor(container: HTMLElement, options?: IOptions) {
 		this.supportIcons = options?.supportIcons ?? false;
 		this.domNode = dom.append(container, dom.$('span.monaco-highlighted-label'));
+	}
+
+	dispose(): void {
+		// TODO: This is not actually be disposed of properly by all owners
+		// Also we should explore if there's a nicer way to clean up highlights for a given dom node
+		this.clearHighlights();
 	}
 
 	/**
@@ -83,47 +110,79 @@ export class HighlightedLabel {
 		this.render();
 	}
 
+	private renderedText?: string;
+	private currentHighlightRanges: StaticRange[] = [];
+
 	private render(): void {
-
-		const children: Array<HTMLSpanElement | string> = [];
-		let pos = 0;
-
-		for (const highlight of this.highlights) {
-			if (highlight.end === highlight.start) {
-				continue;
+		if (CSS.highlights) {
+			if (this.renderedText !== this.text) {
+				dom.reset(this.domNode, ...this.supportIcons ? renderLabelWithIcons(this.text) : [this.text]);
+				this.renderedText = this.text;
 			}
 
-			if (pos < highlight.start) {
-				const substring = this.text.substring(pos, highlight.start);
+			this.clearHighlights();
+
+			// TODO: this does not support labels with icons correctly as the ranges are incorrect
+			const el = this.domNode.firstChild;
+			for (const highlight of this.highlights) {
+				if (!el) {
+					break;
+				}
+
+				if (highlight.end === highlight.start) {
+					continue;
+				}
+
+				const range = new StaticRange({
+					startContainer: el,
+					startOffset: highlight.start,
+					endContainer: el,
+					endOffset: highlight.end,
+				});
+				this.currentHighlightRanges.push(range);
+				cssHighlight.add(range);
+			}
+		} else {
+			const children: Array<HTMLSpanElement | string> = [];
+			let pos = 0;
+
+			for (const highlight of this.highlights) {
+				if (highlight.end === highlight.start) {
+					continue;
+				}
+
+				if (pos < highlight.start) {
+					const substring = this.text.substring(pos, highlight.start);
+					if (this.supportIcons) {
+						children.push(...renderLabelWithIcons(substring));
+					} else {
+						children.push(substring);
+					}
+					pos = highlight.start;
+				}
+
+				const substring = this.text.substring(pos, highlight.end);
+				const element = dom.$('span.highlight', undefined, ...this.supportIcons ? renderLabelWithIcons(substring) : [substring]);
+
+				if (highlight.extraClasses) {
+					element.classList.add(...highlight.extraClasses);
+				}
+
+				children.push(element);
+				pos = highlight.end;
+			}
+
+			if (pos < this.text.length) {
+				const substring = this.text.substring(pos,);
 				if (this.supportIcons) {
 					children.push(...renderLabelWithIcons(substring));
 				} else {
 					children.push(substring);
 				}
-				pos = highlight.start;
 			}
 
-			const substring = this.text.substring(pos, highlight.end);
-			const element = dom.$('span.highlight', undefined, ...this.supportIcons ? renderLabelWithIcons(substring) : [substring]);
-
-			if (highlight.extraClasses) {
-				element.classList.add(...highlight.extraClasses);
-			}
-
-			children.push(element);
-			pos = highlight.end;
+			dom.reset(this.domNode, ...children);
 		}
-
-		if (pos < this.text.length) {
-			const substring = this.text.substring(pos,);
-			if (this.supportIcons) {
-				children.push(...renderLabelWithIcons(substring));
-			} else {
-				children.push(substring);
-			}
-		}
-
-		dom.reset(this.domNode, ...children);
 
 		if (this.title) {
 			this.domNode.title = this.title;
@@ -132,6 +191,15 @@ export class HighlightedLabel {
 		}
 
 		this.didEverRender = true;
+	}
+
+	clearHighlights() {
+		if (CSS.highlights) {
+			for (const highlight of this.currentHighlightRanges) {
+				cssHighlight.delete(highlight);
+			}
+			this.currentHighlightRanges = [];
+		}
 	}
 
 	static escapeNewLines(text: string, highlights: readonly IHighlight[]): string {
