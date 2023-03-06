@@ -170,6 +170,10 @@ class OneReferenceTemplate {
 		this.label = new HighlightedLabel(container);
 	}
 
+	dispose() {
+		this.label.dispose();
+	}
+
 	set(element: OneReference, score?: FuzzyScore): void {
 		const preview = element.parent.getPreview(element)?.preview(element.range);
 		if (!preview || !preview.value) {
@@ -202,7 +206,8 @@ export class OneReferenceRenderer implements ITreeRenderer<OneReference, FuzzySc
 	renderElement(node: ITreeNode<OneReference, FuzzyScore>, index: number, templateData: OneReferenceTemplate): void {
 		templateData.set(node.element, node.filterData);
 	}
-	disposeTemplate(): void {
+	disposeTemplate(templateData: OneReferenceTemplate): void {
+		templateData.dispose();
 	}
 }
 

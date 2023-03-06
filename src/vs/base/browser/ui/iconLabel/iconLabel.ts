@@ -185,6 +185,14 @@ export class IconLabel extends Disposable {
 			disposable.dispose();
 		}
 		this.customHovers.clear();
+
+		if (this.nameNode instanceof LabelWithHighlights) {
+			this.nameNode.dispose();
+		}
+
+		if (this.descriptionNode instanceof HighlightedLabel) {
+			this.descriptionNode.dispose();
+		}
 	}
 
 	private getOrCreateDescriptionNode() {
@@ -264,13 +272,17 @@ function splitMatches(labels: string[], separator: string, matches: readonly IMa
 	});
 }
 
-class LabelWithHighlights {
+class LabelWithHighlights implements IDisposable {
 
 	private label: string | string[] | undefined = undefined;
 	private singleLabel: HighlightedLabel | undefined = undefined;
 	private options: IIconLabelValueOptions | undefined;
 
 	constructor(private container: HTMLElement, private supportIcons: boolean) { }
+
+	dispose() {
+		this.singleLabel?.dispose();
+	}
 
 	setLabel(label: string | string[], options?: IIconLabelValueOptions): void {
 		if (this.label === label && equals(this.options, options)) {
