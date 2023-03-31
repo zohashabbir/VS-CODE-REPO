@@ -1231,7 +1231,8 @@ export class TextModel extends Disposable implements model.ITextModel, IDecorati
 			rawOperation.text,
 			rawOperation.forceMoveMarkers || false,
 			rawOperation.isAutoWhitespaceEdit || false,
-			rawOperation._isTracked || false
+			rawOperation._isTracked || false,
+			rawOperation.source,
 		);
 	}
 
@@ -1518,7 +1519,8 @@ export class TextModel extends Disposable implements model.ITextModel, IDecorati
 					versionId: this.getVersionId(),
 					isUndoing: this._isUndoing,
 					isRedoing: this._isRedoing,
-					isFlush: false
+					isFlush: false,
+					source: result.source,
 				}
 			);
 		}
