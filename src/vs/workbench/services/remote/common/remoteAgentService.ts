@@ -10,6 +10,7 @@ import { IDiagnosticInfoOptions, IDiagnosticInfo } from 'vs/platform/diagnostics
 import { Event } from 'vs/base/common/event';
 import { PersistentConnectionEvent, ISocketFactory } from 'vs/platform/remote/common/remoteAgentConnection';
 import { ITelemetryData, TelemetryLevel } from 'vs/platform/telemetry/common/telemetry';
+import { ILifecycleService } from 'vs/workbench/services/lifecycle/common/lifecycle';
 
 export const IRemoteAgentService = createDecorator<IRemoteAgentService>('remoteAgentService');
 
@@ -17,6 +18,8 @@ export interface IRemoteAgentService {
 	readonly _serviceBrand: undefined;
 
 	readonly socketFactory: ISocketFactory;
+
+	registerLifecycleEvents(lifecycleService: ILifecycleService): void;
 
 	getConnection(): IRemoteAgentConnection | null;
 	/**
@@ -60,4 +63,6 @@ export interface IRemoteAgentConnection {
 	withChannel<T extends IChannel, R>(channelName: string, callback: (channel: T) => Promise<R>): Promise<R>;
 	registerChannel<T extends IServerChannel<RemoteAgentConnectionContext>>(channelName: string, channel: T): void;
 	getInitialConnectionTimeMs(): Promise<number>;
+
+	disconnect(): Promise<void>;
 }

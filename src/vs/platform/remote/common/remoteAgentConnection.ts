@@ -640,6 +640,13 @@ export abstract class PersistentConnection extends Disposable {
 		}
 	}
 
+	public async disconnect(): Promise<void> {
+		const socket = this.protocol.getSocket();
+		await this.protocol.sendDisconnectAndWait();
+		this.protocol.dispose();
+		socket.end();
+	}
+
 	public override dispose(): void {
 		super.dispose();
 		this._isDisposed = true;
