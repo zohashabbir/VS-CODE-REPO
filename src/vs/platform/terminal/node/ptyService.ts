@@ -52,7 +52,7 @@ export class PtyService extends Disposable implements IPtyService {
 	readonly onProcessData = this._onProcessData.event;
 	private readonly _onProcessReplay = this._register(new Emitter<{ id: number; event: IPtyHostProcessReplayEvent }>());
 	readonly onProcessReplay = this._onProcessReplay.event;
-	private readonly _onProcessReady = this._register(new Emitter<{ id: number; event: { pid: number; cwd: string } }>());
+	private readonly _onProcessReady = this._register(new Emitter<{ id: number; event: IProcessReadyEvent }>());
 	readonly onProcessReady = this._onProcessReady.event;
 	private readonly _onProcessExit = this._register(new Emitter<{ id: number; event: number | undefined }>());
 	readonly onProcessExit = this._onProcessExit.event;
@@ -255,6 +255,10 @@ export class PtyService extends Disposable implements IPtyService {
 
 	async updateIcon(id: number, userInitiated: boolean, icon: URI | { light: URI; dark: URI } | { id: string; color?: { id: string } }, color?: string): Promise<void> {
 		this._throwIfNoPty(id).setIcon(userInitiated, icon, color);
+	}
+
+	async clearBuffer(id: number): Promise<void> {
+		this._throwIfNoPty(id).clearBuffer();
 	}
 
 	async refreshProperty<T extends ProcessPropertyType>(id: number, type: T): Promise<IProcessPropertyMap[T]> {
@@ -482,7 +486,8 @@ export class PtyService extends Disposable implements IPtyService {
 			hideFromUser: persistentProcess.shellLaunchConfig.hideFromUser,
 			isFeatureTerminal: persistentProcess.shellLaunchConfig.isFeatureTerminal,
 			type: persistentProcess.shellLaunchConfig.type,
-			hasChildProcesses: persistentProcess.hasChildProcesses
+			hasChildProcesses: persistentProcess.hasChildProcesses,
+			shellIntegrationNonce: persistentProcess.processLaunchOptions.options.shellIntegration.nonce
 		};
 	}
 
@@ -609,6 +614,7 @@ class PersistentTerminalProcess extends Disposable {
 			reconnectConstants.scrollback,
 			unicodeVersion,
 			reviveBuffer,
+			processLaunchOptions.options.shellIntegration.nonce,
 			shouldPersistTerminal ? rawReviveBuffer : undefined,
 			this._logService
 		);
@@ -714,7 +720,7 @@ class PersistentTerminalProcess extends Disposable {
 			return result;
 		}
 
-		this._onProcessReady.fire({ pid: this._pid, cwd: this._cwd, requiresWindowsMode: isWindows && getWindowsBuildNumber() < 21376 });
+		this._onProcessReady.fire({ pid: this._pid, cwd: this._cwd, windowsPty: this._terminalProcess.getWindowsPty() });
 		this._onDidChangeProperty.fire({ type: ProcessPropertyType.Title, value: this._terminalProcess.currentTitle });
 		this._onDidChangeProperty.fire({ type: ProcessPropertyType.ShellType, value: this._terminalProcess.shellType });
 		this.triggerReplay();
@@ -750,6 +756,10 @@ class PersistentTerminalProcess extends Disposable {
 			listener.handleResize();
 		}
 		return this._terminalProcess.resize(cols, rows);
+	}
+	async clearBuffer(): Promise<void> {
+		this._serializer.clearBuffer();
+		this._terminalProcess.clearBuffer();
 	}
 	setUnicodeVersion(version: '6' | '11'): void {
 		this.unicodeVersion = version;
@@ -882,6 +892,7 @@ class XtermSerializer implements ITerminalSerializer {
 		scrollback: number,
 		unicodeVersion: '6' | '11',
 		reviveBufferWithRestoreMessage: string | undefined,
+		shellIntegrationNonce: string,
 		private _rawReviveBuffer: string | undefined,
 		logService: ILogService
 	) {
@@ -895,7 +906,7 @@ class XtermSerializer implements ITerminalSerializer {
 			this._xterm.writeln(reviveBufferWithRestoreMessage);
 		}
 		this.setUnicodeVersion(unicodeVersion);
-		this._shellIntegrationAddon = new ShellIntegrationAddon(true, undefined, logService);
+		this._shellIntegrationAddon = new ShellIntegrationAddon(shellIntegrationNonce, true, undefined, logService);
 		this._xterm.loadAddon(this._shellIntegrationAddon);
 	}
 
@@ -910,6 +921,10 @@ class XtermSerializer implements ITerminalSerializer {
 
 	handleResize(cols: number, rows: number): void {
 		this._xterm.resize(cols, rows);
+	}
+
+	clearBuffer(): void {
+		this._xterm.clear();
 	}
 
 	async generateReplayEvent(normalBufferOnly?: boolean, restoreToLastReviveBuffer?: boolean): Promise<IPtyHostProcessReplayEvent> {
@@ -996,6 +1011,7 @@ interface ITerminalSerializer {
 	handleData(data: string): void;
 	freeRawReviveBuffer(): void;
 	handleResize(cols: number, rows: number): void;
+	clearBuffer(): void;
 	generateReplayEvent(normalBufferOnly?: boolean, restoreToLastReviveBuffer?: boolean): Promise<IPtyHostProcessReplayEvent>;
 	setUnicodeVersion?(version: '6' | '11'): void;
 }

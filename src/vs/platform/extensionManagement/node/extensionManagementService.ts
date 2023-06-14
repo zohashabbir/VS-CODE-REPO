@@ -25,7 +25,7 @@ import { extract, ExtractError, IFile, zip } from 'vs/base/node/zip';
 import * as nls from 'vs/nls';
 import { IDownloadService } from 'vs/platform/download/common/download';
 import { INativeEnvironmentService } from 'vs/platform/environment/common/environment';
-import { AbstractExtensionManagementService, AbstractExtensionTask, ExtensionVerificationStatus, IInstallExtensionTask, InstallExtensionTaskOptions, IUninstallExtensionTask, joinErrors, UninstallExtensionTaskOptions } from 'vs/platform/extensionManagement/common/abstractExtensionManagementService';
+import { AbstractExtensionManagementService, AbstractExtensionTask, ExtensionVerificationStatus, IInstallExtensionTask, InstallExtensionTaskOptions, IUninstallExtensionTask, joinErrors, toExtensionManagementError, UninstallExtensionTaskOptions } from 'vs/platform/extensionManagement/common/abstractExtensionManagementService';
 import {
 	ExtensionManagementError, ExtensionManagementErrorCode, IExtensionGalleryService, IExtensionIdentifier, IExtensionManagementService, IGalleryExtension, ILocalExtension, InstallOperation,
 	Metadata, InstallVSIXOptions
@@ -148,11 +148,19 @@ export class ExtensionManagementService extends AbstractExtensionManagementServi
 
 		try {
 			const manifest = await getManifest(path.resolve(location.fsPath));
+			const extensionId = getGalleryExtensionId(manifest.publisher, manifest.name);
 			if (manifest.engines && manifest.engines.vscode && !isEngineValid(manifest.engines.vscode, this.productService.version, this.productService.date)) {
-				throw new Error(nls.localize('incompatible', "Unable to install extension '{0}' as it is not compatible with VS Code '{1}'.", getGalleryExtensionId(manifest.publisher, manifest.name), this.productService.version));
+				throw new Error(nls.localize('incompatible', "Unable to install extension '{0}' as it is not compatible with VS Code '{1}'.", extensionId, this.productService.version));
 			}
 
-			return await this.installExtension(manifest, location, options);
+			const result = await this.installExtensions([{ manifest, extension: location, options }]);
+			if (result[0]?.local) {
+				return result[0]?.local;
+			}
+			if (result[0]?.error) {
+				throw result[0].error;
+			}
+			throw toExtensionManagementError(new Error(`Unknown error while installing extension ${extensionId}`));
 		} finally {
 			await cleanup();
 		}
@@ -531,7 +539,7 @@ export class ExtensionsScanner extends Disposable {
 
 	async removeExtension(extension: ILocalExtension | IScannedExtension, type: string): Promise<void> {
 		this.logService.trace(`Deleting ${type} extension from disk`, extension.identifier.id, extension.location.fsPath);
-		const renamedLocation = this.uriIdentityService.extUri.joinPath(this.uriIdentityService.extUri.dirname(extension.location), `.${generateUuid()}`);
+		const renamedLocation = this.uriIdentityService.extUri.joinPath(this.uriIdentityService.extUri.dirname(extension.location), `._${generateUuid()}`);
 		await this.rename(extension.identifier, extension.location.fsPath, renamedLocation.fsPath, Date.now() + (2 * 60 * 1000) /* Retry for 2 minutes */);
 		await this.fileService.del(renamedLocation, { recursive: true });
 		this.logService.info('Deleted from disk', extension.identifier.id, extension.location.fsPath);
@@ -706,7 +714,7 @@ export class ExtensionsScanner extends Disposable {
 			}
 		}
 		for (const child of stat?.children ?? []) {
-			if (child.isDirectory && child.name.startsWith('.') && isUUID(child.name.substring(1))) {
+			if (child.isDirectory && child.name.startsWith('._') && isUUID(child.name.substring(2))) {
 				promises.push((async () => {
 					this.logService.trace('Deleting the generated extension folder', child.resource.toString());
 					try {

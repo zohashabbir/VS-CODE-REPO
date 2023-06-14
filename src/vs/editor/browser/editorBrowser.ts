@@ -21,6 +21,7 @@ import { IEditorWhitespace, IViewModel } from 'vs/editor/common/viewModel';
 import { InjectedText } from 'vs/editor/common/modelLineProjectionData';
 import { ILineChange, IDiffComputationResult } from 'vs/editor/common/diff/smartLinesDiffComputer';
 import { IDimension } from 'vs/editor/common/core/dimension';
+import { IBoundarySashes } from 'vs/base/browser/ui/sash/sash';
 
 /**
  * A view zone is a full horizontal rectangle that 'pushes' text down.
@@ -38,11 +39,19 @@ export interface IViewZone {
 	 * This is relevant for wrapped lines.
 	 */
 	afterColumn?: number;
-
 	/**
 	 * If the `afterColumn` has multiple view columns, the affinity specifies which one to use. Defaults to `none`.
 	*/
 	afterColumnAffinity?: PositionAffinity;
+	/**
+	 * Render the zone even when its line is hidden.
+	 */
+	showInHiddenAreas?: boolean;
+	/**
+	 * Tiebreaker that is used when multiple view zones want to be after the same line.
+	 * Defaults to `afterColumn` otherwise 10000;
+	 */
+	ordinal?: number;
 	/**
 	 * Suppress mouse down events.
 	 * If set, the editor will attach a mouse down listener to the view zone and .preventDefault on it.
@@ -480,12 +489,6 @@ export interface IDiffEditorConstructionOptions extends IDiffEditorOptions {
 	 * Aria label for modified editor.
 	 */
 	modifiedAriaLabel?: string;
-
-	/**
-	 * Is the diff editor inside another editor
-	 * Defaults to false
-	 */
-	isInEmbeddedEditor?: boolean;
 }
 
 /**
@@ -1093,13 +1096,6 @@ export interface IActiveCodeEditor extends ICodeEditor {
 }
 
 /**
- * Information about a line in the diff editor
- */
-export interface IDiffLineInformation {
-	readonly equivalentLineNumber: number;
-}
-
-/**
  * @internal
  */
 export const enum DiffEditorState {
@@ -1161,6 +1157,8 @@ export interface IDiffEditor extends editorCommon.IEditor {
 	 */
 	getModel(): editorCommon.IDiffEditorModel | null;
 
+	createViewModel(model: editorCommon.IDiffEditorModel): editorCommon.IDiffEditorViewModel;
+
 	/**
 	 * Sets the current model attached to this editor.
 	 * If the previous model was created by the editor via the value key in the options
@@ -1169,7 +1167,7 @@ export interface IDiffEditor extends editorCommon.IEditor {
 	 * will not be destroyed.
 	 * It is safe to call setModel(null) to simply detach the current model from the editor.
 	 */
-	setModel(model: editorCommon.IDiffEditorModel | null): void;
+	setModel(model: editorCommon.IDiffEditorModel | editorCommon.IDiffEditorViewModel | null): void;
 
 	/**
 	 * Get the `original` editor.
@@ -1193,21 +1191,24 @@ export interface IDiffEditor extends editorCommon.IEditor {
 	getDiffComputationResult(): IDiffComputationResult | null;
 
 	/**
-	 * Get information based on computed diff about a line number from the original model.
-	 * If the diff computation is not finished or the model is missing, will return null.
-	 */
-	getDiffLineInformationForOriginal(lineNumber: number): IDiffLineInformation | null;
-
-	/**
-	 * Get information based on computed diff about a line number from the modified model.
-	 * If the diff computation is not finished or the model is missing, will return null.
-	 */
-	getDiffLineInformationForModified(lineNumber: number): IDiffLineInformation | null;
-
-	/**
 	 * Update the editor's options after the editor has been created.
 	 */
 	updateOptions(newOptions: IDiffEditorOptions): void;
+
+	/**
+	 * @internal
+	 */
+	setBoundarySashes(sashes: IBoundarySashes): void;
+
+	/**
+	 * @internal
+	 */
+	goToDiff(target: 'next' | 'previous'): void;
+
+	/**
+	 * @internal
+	 */
+	revealFirstDiff(): unknown;
 }
 
 /**
