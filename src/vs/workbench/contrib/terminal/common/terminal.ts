@@ -490,6 +490,7 @@ export const enum TerminalCommandId {
 	HideSuggestWidget = 'workbench.action.terminal.hideSuggestWidget',
 	FocusHover = 'workbench.action.terminal.focusHover',
 	ShowEnvironmentContributions = 'workbench.action.terminal.showEnvironmentContributions',
+	PictureInPicture = 'workbench.action.terminal.pictureInPicture',
 
 	// Developer commands
 
