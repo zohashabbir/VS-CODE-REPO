@@ -36,6 +36,9 @@ export interface IExtensionHostInitData {
 	environment: IEnvironment;
 	workspace?: IStaticWorkspaceData | null;
 	extensions: IExtensionDescriptionSnapshot;
+	terminal: {
+		readonly defaultShell: string;
+	} | undefined;
 	nlsBaseUrl?: URI;
 	telemetryInfo: {
 		readonly sessionId: string;

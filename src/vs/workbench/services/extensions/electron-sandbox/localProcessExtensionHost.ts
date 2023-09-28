@@ -39,6 +39,7 @@ import { ExtensionHostExtensions, ExtensionHostStartup, IExtensionHost } from 'v
 import { IHostService } from 'vs/workbench/services/host/browser/host';
 import { ILifecycleService, WillShutdownEvent } from 'vs/workbench/services/lifecycle/common/lifecycle';
 import { parseExtensionDevOptions } from '../common/extensionDevOptions';
+import { ILocalPtyService, IPtyService } from 'vs/platform/terminal/common/terminal';
 
 export interface ILocalProcessExtensionHostInitData {
 	readonly extensions: ExtensionHostExtensions;
@@ -131,6 +132,7 @@ export class NativeLocalProcessExtensionHost implements IExtensionHost {
 		@IHostService private readonly _hostService: IHostService,
 		@IProductService private readonly _productService: IProductService,
 		@IShellEnvironmentService private readonly _shellEnvironmentService: IShellEnvironmentService,
+		@ILocalPtyService private readonly _localPtyService: ILocalPtyService,
 		@IExtensionHostStarter protected readonly _extensionHostStarter: IExtensionHostStarter,
 		@IConfigurationService protected readonly _configurationService: IConfigurationService,
 	) {
@@ -453,6 +455,10 @@ export class NativeLocalProcessExtensionHost implements IExtensionHost {
 				logNative: !this._isExtensionDevTestFromCli && this._isExtensionDevHost
 			},
 			extensions: this.extensions.toSnapshot(),
+			terminal: {
+				// Cache last value for this wordspace in pty service
+				defaultShell: await this._localPtyService.getCachedDefaultShell(workspace.id)
+			},
 			telemetryInfo: {
 				sessionId: this._telemetryService.sessionId,
 				machineId: this._telemetryService.machineId,

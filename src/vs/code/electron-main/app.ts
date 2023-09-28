@@ -984,13 +984,39 @@ export class CodeApplication extends Disposable {
 			shortGraceTime: LocalReconnectConstants.ShortGraceTime,
 			scrollback: this.configurationService.getValue<number>(TerminalSettingId.PersistentSessionScrollback) ?? 100
 		}, this.configurationService, this.environmentMainService, this.lifecycleMainService, this.logService);
-		const ptyHostService = new PtyHostService(
-			ptyHostStarter,
-			this.configurationService,
-			this.logService,
-			this.loggerService
-		);
-		services.set(ILocalPtyService, ptyHostService);
+		// const ptyHostService = new Sync PtyHostService(
+		// 	ptyHostStarter,
+		// 	this.configurationService,
+		// 	this.logService,
+		// 	this.loggerService,
+		// 	this.stor
+		// );
+		services.set(ILocalPtyService, new SyncDescriptor(PtyHostService, [ptyHostStarter]));
+
+		async function a1(): Promise<string> {
+			if (foo) {
+				await d;
+				return b as Promise<string>;
+			}
+			return c;
+		}
+
+		a1().then(() => {
+		});
+
+		// Faster if async is optional
+		function a2(): Promise<string> | string {
+			if (foo) {
+				return dialog.then(() => b);
+			}
+			return c;
+		}
+
+		// error
+		a2().then(() => {
+		});
+
+		await a2();
 
 		// External terminal
 		if (isWindows) {

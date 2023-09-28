@@ -21,6 +21,9 @@ import { detectAvailableProfiles } from 'vs/platform/terminal/node/terminalProfi
 import * as performance from 'vs/base/common/performance';
 import { getSystemShell } from 'vs/base/node/shell';
 import { StopWatch } from 'vs/base/common/stopwatch';
+import { IStorageService, StorageScope, StorageTarget } from 'vs/platform/storage/common/storage';
+import { isString } from 'vs/base/common/types';
+import { IInstantiationService } from 'vs/platform/instantiation/common/instantiation';
 
 enum Constants {
 	MaxRestarts = 5
@@ -94,9 +97,10 @@ export class PtyHostService extends Disposable implements IPtyHostService {
 
 	constructor(
 		private readonly _ptyHostStarter: IPtyHostStarter,
+		private readonly _storageService: IStorageService,
 		@IConfigurationService private readonly _configurationService: IConfigurationService,
 		@ILogService private readonly _logService: ILogService,
-		@ILoggerService private readonly _loggerService: ILoggerService,
+		@ILoggerService private readonly _loggerService: ILoggerService
 	) {
 		super();
 
@@ -298,7 +302,14 @@ export class PtyHostService extends Disposable implements IPtyHostService {
 	}
 	async getProfiles(workspaceId: string, profiles: unknown, defaultProfile: unknown, includeDetectedProfiles: boolean = false): Promise<ITerminalProfile[]> {
 		const shellEnv = await this._resolveShellEnv();
-		return detectAvailableProfiles(profiles, defaultProfile, includeDetectedProfiles, this._configurationService, shellEnv, undefined, this._logService, this._resolveVariables.bind(this, workspaceId));
+		const availableProfiles = await detectAvailableProfiles(profiles, defaultProfile, includeDetectedProfiles, this._configurationService, shellEnv, undefined, this._logService, this._resolveVariables.bind(this, workspaceId));
+		const defaultProfileShell = (isString(defaultProfile) && defaultProfile in availableProfiles ? availableProfiles.find(e => e.profileName === defaultProfile)?.profileName : '') ?? '';
+		this._logService.info('storing', defaultProfileShell);
+		this._storageService.store(`env.shell-${workspaceId}`, defaultProfileShell, StorageScope.APPLICATION, StorageTarget.MACHINE);
+		return availableProfiles;
+	}
+	getCachedDefaultShell(workspaceId: string): string {
+		return this._storageService.get(`env.shell-${workspaceId}`, StorageScope.APPLICATION) ?? '';
 	}
 	async getEnvironment(): Promise<IProcessEnvironment> {
 		// If the pty host is yet to be launched, just return the environment of this process as it

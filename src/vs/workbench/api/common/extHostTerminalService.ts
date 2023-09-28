@@ -457,7 +457,11 @@ export abstract class BaseExtHostTerminalService extends Disposable implements I
 
 	public getDefaultShell(useAutomationShell: boolean): string {
 		const profile = useAutomationShell ? this._defaultAutomationProfile : this._defaultProfile;
-		return profile?.path || '';
+		// If the profile is not yet initialized, use the cached value
+		if (!profile) {
+			return '';
+		}
+		return profile.path || '';
 	}
 
 	public getDefaultShellArgs(useAutomationShell: boolean): string[] | string {

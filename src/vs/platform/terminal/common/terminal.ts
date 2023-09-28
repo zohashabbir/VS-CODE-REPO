@@ -367,6 +367,7 @@ export interface IPtyHostController {
 	restartPtyHost(): Promise<void>;
 	acceptPtyHostResolvedVariables(requestId: number, resolved: string[]): Promise<void>;
 	getProfiles(workspaceId: string, profiles: unknown, defaultProfile: unknown, includeDetectedProfiles?: boolean): Promise<ITerminalProfile[]>;
+	getCachedDefaultShell(workspaceId: string): string;
 }
 
 /**
