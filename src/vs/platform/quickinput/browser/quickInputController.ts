@@ -72,6 +72,12 @@ export class QuickInputController extends Disposable {
 
 	private getUI() {
 		if (this.ui) {
+			// Re-parent the controller if the original event is from a different window/document
+			const targetElement = window.event?.target as HTMLElement | null;
+			if (targetElement && this.parentElement.ownerDocument !== targetElement?.ownerDocument) {
+				this.parentElement = targetElement.ownerDocument.body;
+				dom.append(this.parentElement, this.ui.container);
+			}
 			return this.ui;
 		}
 
