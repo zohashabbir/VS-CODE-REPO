@@ -292,18 +292,34 @@ export class FileIconThemeLoader {
 				if (folderNames) {
 					for (const key in folderNames) {
 						const selectors: string[] = [];
-						const name = handleParentFolder(key.toLowerCase(), selectors);
-						selectors.push(`.${escapeCSS(name)}-name-folder-icon`);
+						const name = handleParentFolder(key.toLowerCase(), selectors, 'folder');
+						const mode = name.indexOf('*') !== -1 ? 'glob' : 'name';
+
+						selectors.push(`.${escapeCSS(name)}-${mode}-folder-icon`);
+
+						if (mode === 'name') {
+							selectors.push('.name-folder-icon'); // extra segment to increase folder-name score
+						}
+
 						addSelector(`${qualifier} ${selectors.join('')}.folder-icon::before`, folderNames[key]);
+
 						result.hasFolderIcons = true;
 					}
 				}
+
 				const folderNamesExpanded = associations.folderNamesExpanded;
 				if (folderNamesExpanded) {
 					for (const key in folderNamesExpanded) {
 						const selectors: string[] = [];
-						const name = handleParentFolder(key.toLowerCase(), selectors);
-						selectors.push(`.${escapeCSS(name)}-name-folder-icon`);
+						const name = handleParentFolder(key.toLowerCase(), selectors, 'folder');
+						const mode = name.indexOf('*') !== -1 ? 'glob' : 'name';
+
+						selectors.push(`.${escapeCSS(name)}-${mode}-folder-icon`);
+
+						if (mode === 'name') {
+							selectors.push('.name-folder-icon'); // extra segment to increase folder-name score
+						}
+
 						addSelector(`${qualifier} ${expanded} ${selectors.join('')}.folder-icon::before`, folderNamesExpanded[key]);
 						result.hasFolderIcons = true;
 					}
@@ -325,7 +341,8 @@ export class FileIconThemeLoader {
 				if (fileExtensions) {
 					for (const key in fileExtensions) {
 						const selectors: string[] = [];
-						const name = handleParentFolder(key.toLowerCase(), selectors);
+						const name = handleParentFolder(key.toLowerCase(), selectors, 'file');
+
 						const segments = name.split('.');
 						if (segments.length) {
 							for (let i = 0; i < segments.length; i++) {
@@ -333,7 +350,9 @@ export class FileIconThemeLoader {
 							}
 							selectors.push('.ext-file-icon'); // extra segment to increase file-ext score
 						}
+
 						addSelector(`${qualifier} ${selectors.join('')}.file-icon::before`, fileExtensions[key]);
+
 						result.hasFileIcons = true;
 						hasSpecificFileIcons = true;
 					}
@@ -342,9 +361,15 @@ export class FileIconThemeLoader {
 				if (fileNames) {
 					for (const key in fileNames) {
 						const selectors: string[] = [];
-						const fileName = handleParentFolder(key.toLowerCase(), selectors);
-						selectors.push(`.${escapeCSS(fileName)}-name-file-icon`);
-						selectors.push('.name-file-icon'); // extra segment to increase file-name score
+						const fileName = handleParentFolder(key.toLowerCase(), selectors, 'file');
+						const mode = fileName.indexOf('*') !== -1 ? 'glob' : 'name';
+
+						selectors.push(`.${escapeCSS(fileName)}-${mode}-file-icon`);
+
+						if (mode === 'name') {
+							selectors.push('.name-file-icon'); // extra segment to increase file-name score
+						}
+
 						const segments = fileName.split('.');
 						if (segments.length) {
 							for (let i = 1; i < segments.length; i++) {
@@ -352,7 +377,9 @@ export class FileIconThemeLoader {
 							}
 							selectors.push('.ext-file-icon'); // extra segment to increase file-ext score
 						}
+
 						addSelector(`${qualifier} ${selectors.join('')}.file-icon::before`, fileNames[key]);
+
 						result.hasFileIcons = true;
 						hasSpecificFileIcons = true;
 					}
@@ -434,11 +461,11 @@ export class FileIconThemeLoader {
 
 }
 
-function handleParentFolder(key: string, selectors: string[]): string {
+function handleParentFolder(key: string, selectors: string[], kind: string): string {
 	const lastIndexOfSlash = key.lastIndexOf('/');
 	if (lastIndexOfSlash >= 0) {
 		const parentFolder = key.substring(0, lastIndexOfSlash);
-		selectors.push(`.${escapeCSS(parentFolder)}-name-dir-icon`);
+		selectors.push(`.${escapeCSS(parentFolder)}-dirname-${kind}-icon`);
 		return key.substring(lastIndexOfSlash + 1);
 	}
 	return key;
