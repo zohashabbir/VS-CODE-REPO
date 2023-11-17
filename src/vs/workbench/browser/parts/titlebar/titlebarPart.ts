@@ -257,6 +257,7 @@ export class TitlebarPart extends Part implements ITitleService {
 			this.title.innerText = this.windowTitle.value;
 			this.titleDisposables.add(this.windowTitle.onDidChange(() => {
 				this.title.innerText = this.windowTitle.value;
+				this.customMenubar?.onTitleTextChanged();
 			}));
 		} else {
 			// Menu Title
