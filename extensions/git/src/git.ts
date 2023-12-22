@@ -1693,6 +1693,12 @@ export class Repository {
 		await this.exec(args);
 	}
 
+	async deleteRemoteBranch(name: string): Promise<void> {
+		const firstSlashIndex = name.indexOf('/');
+		const args = ['push', name.slice(0, firstSlashIndex), '--delete', name.slice(firstSlashIndex + 1, name.length)];
+		await this.exec(args);
+	}
+
 	async renameBranch(name: string): Promise<void> {
 		const args = ['branch', '-m', name];
 		await this.exec(args);

@@ -105,6 +105,23 @@ class BranchDeleteItem implements QuickPickItem {
 	}
 }
 
+class RemoteBranchDeleteItem implements QuickPickItem {
+
+	private get shortCommit(): string { return (this.ref.commit || '').substr(0, 8); }
+	get branchName(): string | undefined { return this.ref.name; }
+	get label(): string { return this.branchName || ''; }
+	get description(): string { return this.shortCommit; }
+
+	constructor(private ref: Ref) { }
+
+	async run(repository: Repository): Promise<void> {
+		if (!this.branchName) {
+			return;
+		}
+		await repository.deleteRemoteBranch(this.branchName);
+	}
+}
+
 class MergeItem implements QuickPickItem {
 
 	private shortCommit: string;
@@ -2468,6 +2485,46 @@ export class CommandCenter {
 
 			if (pick === yes) {
 				await run(true);
+			}
+		}
+	}
+
+	@command('git.deleteRemoteBranch', { repository: true })
+	async deleteRemoteBranch(repository: Repository, name: string): Promise<void> {
+		let run: () => Promise<void>;
+		if (typeof name === 'string') {
+			run = () => repository.deleteRemoteBranch(name);
+		} else {
+			const getBranchPicks = async () => {
+				const refs = await repository.getRefs({ pattern: 'refs/remotes' });
+				const currentHead = repository.HEAD && repository.HEAD.name;
+
+				return refs.filter(ref => ref.name !== currentHead).map(ref => new RemoteBranchDeleteItem(ref));
+			};
+
+			const placeHolder = l10n.t('Select a remote branch to delete');
+			const choice = await window.showQuickPick<RemoteBranchDeleteItem>(getBranchPicks(), { placeHolder });
+
+			if (!choice || !choice.branchName) {
+				return;
+			}
+			name = choice.branchName;
+			run = () => choice.run(repository);
+		}
+
+		try {
+			await run();
+		} catch (err) {
+			if (err.gitErrorCode !== GitErrorCodes.BranchNotFullyMerged) {
+				throw err;
+			}
+
+			const message = l10n.t('The branch "{0}" is not fully merged. Delete anyway?', name);
+			const yes = l10n.t('Delete Branch');
+			const pick = await window.showWarningMessage(message, { modal: true }, yes);
+
+			if (pick === yes) {
+				await run();
 			}
 		}
 	}
