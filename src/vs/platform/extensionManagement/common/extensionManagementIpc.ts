@@ -142,6 +142,10 @@ export class ExtensionManagementChannel implements IServerChannel {
 				const extensions = await this.service.getInstalled(args[0], transformIncomingURI(args[1], uriTransformer));
 				return extensions.map(e => transformOutgoingExtension(e, uriTransformer));
 			}
+			case 'toggleAppliationScope': {
+				const extension = await this.service.toggleAppliationScope(transformIncomingExtension(args[0], uriTransformer), transformIncomingURI(args[1], uriTransformer));
+				return transformOutgoingExtension(extension, uriTransformer);
+			}
 			case 'copyExtensions': {
 				return this.service.copyExtensions(transformIncomingURI(args[0], uriTransformer), transformIncomingURI(args[1], uriTransformer));
 			}
@@ -260,7 +264,7 @@ export class ExtensionManagementChannelClient extends Disposable implements IExt
 	}
 
 	uninstall(extension: ILocalExtension, options?: UninstallOptions): Promise<void> {
-		return Promise.resolve(this.channel.call<void>('uninstall', [extension!, options]));
+		return Promise.resolve(this.channel.call<void>('uninstall', [extension, options]));
 	}
 
 	reinstallFromGallery(extension: ILocalExtension): Promise<ILocalExtension> {
@@ -274,6 +278,11 @@ export class ExtensionManagementChannelClient extends Disposable implements IExt
 
 	updateMetadata(local: ILocalExtension, metadata: Partial<Metadata>, extensionsProfileResource?: URI): Promise<ILocalExtension> {
 		return Promise.resolve(this.channel.call<ILocalExtension>('updateMetadata', [local, metadata, extensionsProfileResource]))
+			.then(extension => transformIncomingExtension(extension, null));
+	}
+
+	toggleAppliationScope(local: ILocalExtension, fromProfileLocation: URI): Promise<ILocalExtension> {
+		return this.channel.call<ILocalExtension>('toggleAppliationScope', [local, fromProfileLocation])
 			.then(extension => transformIncomingExtension(extension, null));
 	}
 
