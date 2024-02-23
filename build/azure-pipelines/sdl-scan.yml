@@ -36,6 +36,7 @@ variables:
     value: true
   - name: Codeql.TSAOptionsPath
     value: '$(Build.SourcesDirectory)\build\azure-pipelines\config\tsaoptions.json'
+  - group: 'API Scan'
 
 stages:
   - stage: Windows
@@ -169,7 +170,7 @@ stages:
             displayName: Run ApiScan
             condition: succeeded()
             env:
-              AzureServicesAuthConnectionString: runAs=App;AppId=$(ApiScanClientId);TenantId=$(MSFTTenant);AppKey=$(ApiScanSecret)
+              AzureServicesAuthConnectionString: $(apiscan-connectiontring)
 
           - task: PublishSecurityAnalysisLogs@3
             inputs:
