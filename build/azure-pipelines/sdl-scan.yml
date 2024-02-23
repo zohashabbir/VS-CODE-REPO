@@ -159,13 +159,6 @@ stages:
               SignatureFreshness: 'OneDay'
               TreatStaleSignatureAs: 'Error'
 
-          - task: PublishSecurityAnalysisLogs@3
-            inputs:
-              ArtifactName: CodeAnalysisLogs
-              ArtifactType: Container
-              PublishProcessedResults: false
-              AllTools: true
-
           - task: APIScan@2
             inputs:
               softwareFolder: '$(agent.builddirectory)\scanbin\'
@@ -177,6 +170,13 @@ stages:
             condition: succeeded()
             env:
               AzureServicesAuthConnectionString: runAs=App;AppId=$(ApiScanClientId);TenantId=$(MSFTTenant);AppKey=$(ApiScanSecret)
+
+          - task: PublishSecurityAnalysisLogs@3
+            inputs:
+              ArtifactName: CodeAnalysisLogs
+              ArtifactType: Container
+              PublishProcessedResults: false
+              AllTools: true
 
           - task: TSAUpload@2
             inputs:
@@ -302,14 +302,6 @@ stages:
               toolVersion: Latest
               InputType: CommandLine
               arguments: analyze $(agent.builddirectory)\scanbin\exe\*.* --recurse --local-symbol-directories $(agent.builddirectory)\scanbin\VSCode-linux-$(VSCODE_ARCH)\pdb
-
-          - task: PublishSecurityAnalysisLogs@3
-            displayName: Publish security logs
-            inputs:
-              ArtifactName: 'CodeAnalysisLogs'
-              ArtifactType: 'Container'
-              AllTools: true
-              ToolLogsNotFoundAction: 'Standard'
 
           - task: TSAUpload@2
             inputs:
