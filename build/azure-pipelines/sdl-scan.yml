@@ -14,6 +14,10 @@ parameters:
     displayName: "Scan Linux"
     type: boolean
     default: false
+  - name: CARGO_REGISTRY
+    displayName: "Custom Cargo Registry"
+    type: string
+    default: 'sparse+https://pkgs.dev.azure.com/monacotools/Monaco/_packaging/vscode/Cargo/index/'
 
 variables:
   - name: NPM_REGISTRY
@@ -36,6 +40,8 @@ variables:
     value: true
   - name: Codeql.TSAOptionsPath
     value: '$(Build.SourcesDirectory)\build\azure-pipelines\config\tsaoptions.json'
+  - name: CRATE_REGISTRY
+    value: ${{ parameters.CARGO_REGISTRY }}
   - group: 'API Scan'
 
 stages:
