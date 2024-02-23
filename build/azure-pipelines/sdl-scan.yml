@@ -303,6 +303,14 @@ stages:
               InputType: CommandLine
               arguments: analyze $(agent.builddirectory)\scanbin\exe\*.* --recurse --local-symbol-directories $(agent.builddirectory)\scanbin\VSCode-linux-$(VSCODE_ARCH)\pdb
 
+          - task: PublishSecurityAnalysisLogs@3
+            displayName: Publish security logs
+            inputs:
+              ArtifactName: 'CodeAnalysisLogs'
+              ArtifactType: 'Container'
+              AllTools: true
+              ToolLogsNotFoundAction: 'Standard'
+
           - task: TSAUpload@2
             inputs:
               GdnPublishTsaConfigFile: '$(Build.SourceDirectory)\build\azure-pipelines\config\tsaoptions.json'

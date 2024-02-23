@@ -16,6 +16,7 @@
 	"tools": [
 			"BinSkim",
 			"CredScan",
-			"CodeQL"
+			"CodeQL",
+			"APIScan"
 	]
 }
