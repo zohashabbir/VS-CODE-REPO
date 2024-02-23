@@ -110,7 +110,7 @@ steps:
 
           Write-Host "##vso[task.setvariable variable=VSCODE_CLI_APPLICATION_NAME]$env:VSCODE_CLI_APPLICATION_NAME"
 
-          Move-Item -Path $(Build.SourcesDirectory)/cli/target/${{ parameters.VSCODE_CLI_TARGET }}/release/code.exe -Destination "$(Build.ArtifactStagingDirectory)/${env:VSCODE_CLI_APPLICATION_NAME}.exe"
+          Copy-Item -Path $(Build.SourcesDirectory)/cli/target/${{ parameters.VSCODE_CLI_TARGET }}/release/code.exe -Destination "$(Build.ArtifactStagingDirectory)/${env:VSCODE_CLI_APPLICATION_NAME}.exe"
         displayName: Stage CLI
 
       - task: ArchiveFiles@2
