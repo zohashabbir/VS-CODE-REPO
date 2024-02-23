@@ -40,7 +40,7 @@ variables:
     value: true
   - name: Codeql.TSAOptionsPath
     value: '$(Build.SourcesDirectory)\build\azure-pipelines\config\tsaoptions.json'
-  - name: CRATE_REGISTRY
+  - name: CARGO_REGISTRY
     value: ${{ parameters.CARGO_REGISTRY }}
   - group: 'API Scan'
 
