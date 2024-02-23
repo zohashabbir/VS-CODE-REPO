@@ -171,7 +171,7 @@ stages:
               . build/azure-pipelines/win32/exec.ps1
               $ErrorActionPreference = "Stop"
 
-              Copy-Item -Path $(Build.SourcesDirectory)/cli/target/${{ parameters.VSCODE_CLI_TARGET }}/ -Destination ${{ variables.agent.builddirectory }}/scanbin/
+              Copy-Item -Path $(Build.SourcesDirectory)/cli/target/x86_64-pc-windows-msvc/ -Destination ${{ variables.agent.builddirectory }}/scanbin/
             displayName: Stage CLI
 
           - task: PSScriptAnalyzer@1
