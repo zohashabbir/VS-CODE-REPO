@@ -202,7 +202,7 @@ stages:
 
           - task: APIScan@2
             inputs:
-              softwareFolder: '$(agent.builddirectory)\scanbin\'
+              softwareFolder: $(agent.builddirectory)/scanbin
               softwareName: "VS Code"
               softwareVersionNum: '1'
               isLargeApp: false
