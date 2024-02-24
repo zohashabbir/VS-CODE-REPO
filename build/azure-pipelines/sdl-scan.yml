@@ -209,7 +209,8 @@ stages:
           - task: CopyFiles@2
             displayName: 'Collect Symbols for API Scan'
             inputs:
-              Contents: '$(agent.builddirectory)\scanbin\**\*.pdb'
+              SourceFolder: $(Agent.BuildDirectory)
+              Contents: 'scanbin\**\*.pdb'
               TargetFolder: '$(agent.builddirectory)\symbols'
               flattenFolders: true
             condition: succeeded()
