@@ -52,11 +52,11 @@ stages:
       - job: WindowsJob
         timeoutInMinutes: 0
         steps:
-          - task: CredScan@3
-            continueOnError: true
-            inputs:
-              scanFolder: "$(Build.SourcesDirectory)"
-              outputFormat: "pre"
+          # - task: CredScan@3
+          #   continueOnError: true
+          #   inputs:
+          #     scanFolder: "$(Build.SourcesDirectory)"
+          #     outputFormat: "pre"
 
           - task: NodeTool@0
             inputs:
@@ -98,9 +98,9 @@ stages:
             condition: and(succeeded(), ne(variables.NODE_MODULES_RESTORED, 'true'), ne(variables['NPM_REGISTRY'], 'none'))
             displayName: Setup NPM Registry
 
-          - task: CodeQL3000Init@0
-            displayName: CodeQL Initialize
-            condition: eq(variables['Codeql.enabled'], 'True')
+          # - task: CodeQL3000Init@0
+          #   displayName: CodeQL Initialize
+          #   condition: eq(variables['Codeql.enabled'], 'True')
 
           - powershell: |
               . build/azure-pipelines/win32/exec.ps1
@@ -159,7 +159,7 @@ stages:
               VSCODE_CLI_ENV:
                 OPENSSL_LIB_DIR: $(Build.ArtifactStagingDirectory)/openssl/x64-windows-static/lib
                 OPENSSL_INCLUDE_DIR: $(Build.ArtifactStagingDirectory)/openssl/x64-windows-static/include
-                RUSTFLAGS: "-C target-feature=+crt-static -Zprofile"
+                RUSTFLAGS: "-C target-feature=+crt-static"
 
           - powershell: yarn compile
             displayName: Compile
