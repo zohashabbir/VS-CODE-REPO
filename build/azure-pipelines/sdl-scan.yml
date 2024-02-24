@@ -216,7 +216,7 @@ stages:
             displayName: Run ApiScan
             condition: succeeded()
             env:
-              AzureServicesAuthConnectionString: $(apiscan-connectiontring)
+              AzureServicesAuthConnectionString: $(apiscan-connectionstring)
 
           - task: PublishSecurityAnalysisLogs@3
             inputs:
