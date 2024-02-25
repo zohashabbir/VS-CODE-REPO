@@ -11,6 +11,9 @@ parameters:
   - name: VSCODE_CHECK_ONLY
     type: boolean
     default: false
+  - name: RELEASE_DEBUG_FLAG
+    type: string
+    default: "--release"
 
 steps:
   - ${{ if contains(parameters.VSCODE_CLI_TARGET, '-windows-') }}:
@@ -63,7 +66,7 @@ steps:
             fi
           fi
 
-          cargo build --release --target ${{ parameters.VSCODE_CLI_TARGET }} --bin=code
+          cargo build ${{ parameters.RELEASE_DEBUG_FLAG }} --target ${{ parameters.VSCODE_CLI_TARGET }} --bin=code
 
           # verify glibc requirement
           if [ -n "$SYSROOT_ARCH" ]; then
@@ -92,7 +95,7 @@ steps:
             ${{ pair.key }}: ${{ pair.value }}
 
     - ${{ else }}:
-      - script: cargo build --release --target ${{ parameters.VSCODE_CLI_TARGET }} --bin=code
+      - script: cargo build ${{ parameters.RELEASE_DEBUG_FLAG }} --target ${{ parameters.VSCODE_CLI_TARGET }} --bin=code
         displayName: Compile ${{ parameters.VSCODE_CLI_TARGET }}
         workingDirectory: $(Build.SourcesDirectory)/cli
         env:
