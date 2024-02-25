@@ -1,0 +1,25 @@
+parameters:
+  - name: VSCODE_QUALITY
+    type: string
+  - name: VSCODE_CLI_TARGET
+    type: string
+  - name: VSCODE_CLI_ENV
+    type: object
+    default: {}
+
+steps:
+  - ${{ if eq(parameters.VSCODE_QUALITY, 'oss') }}:
+    - pwsh: Write-Host "##vso[task.setvariable variable=VSCODE_CLI_PRODUCT_JSON]$(Build.SourcesDirectory)/product.json"
+      displayName: Set product.json path
+  - ${{ else }}:
+    - pwsh: Write-Host "##vso[task.setvariable variable=VSCODE_CLI_PRODUCT_JSON]$(Build.SourcesDirectory)/.build/distro/mixin/${{ parameters.VSCODE_QUALITY }}/product.json"
+      displayName: Set product.json path
+
+  - script: cargo build --target ${{ parameters.VSCODE_CLI_TARGET }} --bin=code
+    displayName: Compile ${{ parameters.VSCODE_CLI_TARGET }}
+    workingDirectory: $(Build.SourcesDirectory)/cli
+    env:
+      CARGO_NET_GIT_FETCH_WITH_CLI: true
+      VSCODE_CLI_COMMIT: $(Build.SourceVersion)
+      ${{ each pair in parameters.VSCODE_CLI_ENV }}:
+        ${{ pair.key }}: ${{ pair.value }}
