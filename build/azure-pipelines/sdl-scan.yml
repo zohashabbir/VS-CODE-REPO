@@ -178,8 +178,7 @@ stages:
             inputs:
               SourceFolder: $(Build.SourcesDirectory)/cli
               Contents: |
-                '**/*.exe'
-                '**/*.dll'
+                **\*
               TargetFolder: $(agent.builddirectory)\scanbin
               flattenFolders: true
             condition: succeeded()
