@@ -176,10 +176,11 @@ stages:
           - task: CopyFiles@2
             displayName: 'Copy CLI to scanbin'
             inputs:
-              SourceFolder: $(Build.SourcesDirectory)/cli
+              SourceFolder: $(Build.SourcesDirectory)/cli/target
               Contents: |
-                **\*
-              TargetFolder: $(agent.builddirectory)\scanbin
+                **\code.exe
+                **\code.exe.pdb
+              TargetFolder: $(agent.builddirectory)\scanbin\cli
               flattenFolders: true
             condition: succeeded()
 
