@@ -161,8 +161,8 @@ stages:
                 OPENSSL_INCLUDE_DIR: $(Build.ArtifactStagingDirectory)/openssl/x64-windows-static/include
                 RUSTFLAGS: "-C target-feature=+crt-static"
 
-          - powershell: yarn compile
-            displayName: Compile
+          # - powershell: yarn compile
+          #   displayName: Compile
 
           # - task: CodeQL3000Finalize@0
           #   displayName: CodeQL Finalize
@@ -173,12 +173,16 @@ stages:
               GITHUB_TOKEN: "$(github-distro-mixin-password)"
             displayName: Download Symbols
 
-          - powershell: |
-              . build/azure-pipelines/win32/exec.ps1
-              $ErrorActionPreference = "Stop"
-
-              Copy-Item -Path $(Build.SourcesDirectory)/cli/target/x86_64-pc-windows-msvc/ -Destination ${{ variables.agent.builddirectory }}/scanbin/
-            displayName: Stage CLI
+          - task: CopyFiles@2
+            displayName: 'Copy CLI to scanbin'
+            inputs:
+              SourceFolder: $(Build.SourcesDirectory)/cli
+              Contents: |
+                '*.exe'
+                '*.dll'
+              TargetFolder: $(agent.builddirectory)\scanbin
+              flattenFolders: true
+            condition: succeeded()
 
           - task: PSScriptAnalyzer@1
             inputs:
