@@ -11,9 +11,6 @@ parameters:
   - name: VSCODE_CHECK_ONLY
     type: boolean
     default: false
-  - name: RELEASE_DEBUG_FLAG
-    type: string
-    default: "--release"
 
 steps:
   - ${{ if contains(parameters.VSCODE_CLI_TARGET, '-windows-') }}:
@@ -66,7 +63,7 @@ steps:
             fi
           fi
 
-          cargo build ${{ parameters.RELEASE_DEBUG_FLAG }} --target ${{ parameters.VSCODE_CLI_TARGET }} --bin=code
+          cargo build --release --target ${{ parameters.VSCODE_CLI_TARGET }} --bin=code
 
           # verify glibc requirement
           if [ -n "$SYSROOT_ARCH" ]; then
@@ -95,7 +92,7 @@ steps:
             ${{ pair.key }}: ${{ pair.value }}
 
     - ${{ else }}:
-      - script: cargo build ${{ parameters.RELEASE_DEBUG_FLAG }} --target ${{ parameters.VSCODE_CLI_TARGET }} --bin=code
+      - script: cargo build --release --target ${{ parameters.VSCODE_CLI_TARGET }} --bin=code
         displayName: Compile ${{ parameters.VSCODE_CLI_TARGET }}
         workingDirectory: $(Build.SourcesDirectory)/cli
         env:
@@ -113,7 +110,7 @@ steps:
 
           Write-Host "##vso[task.setvariable variable=VSCODE_CLI_APPLICATION_NAME]$env:VSCODE_CLI_APPLICATION_NAME"
 
-          Copy-Item -Path $(Build.SourcesDirectory)/cli/target/${{ parameters.VSCODE_CLI_TARGET }}/release/code.exe -Destination "$(Build.ArtifactStagingDirectory)/${env:VSCODE_CLI_APPLICATION_NAME}.exe"
+          Move-Item -Path $(Build.SourcesDirectory)/cli/target/${{ parameters.VSCODE_CLI_TARGET }}/release/code.exe -Destination "$(Build.ArtifactStagingDirectory)/${env:VSCODE_CLI_APPLICATION_NAME}.exe"
         displayName: Stage CLI
 
       - task: ArchiveFiles@2

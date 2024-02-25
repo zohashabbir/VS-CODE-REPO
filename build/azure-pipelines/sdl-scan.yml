@@ -98,6 +98,37 @@ stages:
             condition: and(succeeded(), ne(variables.NODE_MODULES_RESTORED, 'true'), ne(variables['NPM_REGISTRY'], 'none'))
             displayName: Setup NPM Registry
 
+          - pwsh: |
+              $includes = @'
+                {
+                  'target_defaults': {
+                    'conditions': [
+                      ['OS=="win"', {
+                        'msvs_settings': {
+                          'VCCLCompilerTool': {
+                            'AdditionalOptions': [
+                              '/Zi',
+                              '/FS'
+                            ],
+                          },
+                          'VCLinkerTool': {
+                            'AdditionalOptions': [
+                              '/profile'
+                            ]
+                          }
+                        }
+                      }]
+                    ]
+                  }
+                }
+              '@
+
+              if (!(Test-Path "~/.gyp")) {
+                mkdir "~/.gyp"
+                echo $includes > "~/.gyp/include.gypi"
+              }
+            displayName: Create include.gypi
+
           # - task: CodeQL3000Init@0
           #   displayName: CodeQL Initialize
           #   condition: eq(variables['Codeql.enabled'], 'True')
@@ -177,7 +208,7 @@ stages:
               SourceFolder: $(Build.SourcesDirectory)/cli/target
               Contents: |
                 **\code.exe
-                **\code.exe.pdb
+                **\code.pdb
               TargetFolder: $(agent.builddirectory)\scanbin\cli
               flattenFolders: true
             condition: succeeded()
