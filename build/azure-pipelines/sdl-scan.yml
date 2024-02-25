@@ -213,17 +213,6 @@ stages:
               flattenFolders: true
             condition: succeeded()
 
-          - task: CopyFiles@2
-            displayName: 'Copy node_modules/**.exe to scanbin'
-            inputs:
-              SourceFolder: $(Build.SourcesDirectory)/node_modules
-              Contents: |
-                **\*.exe
-                **\*.pdb
-              TargetFolder: $(agent.builddirectory)\scanbin\node_modules
-              flattenFolders: true
-            condition: succeeded()
-
           - task: PSScriptAnalyzer@1
             inputs:
               Path: '$(Build.SourcesDirectory)'
