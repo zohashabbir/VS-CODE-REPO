@@ -156,7 +156,7 @@ stages:
               VSCODE_CLI_TARGET: x86_64-pc-windows-msvc
               VSCODE_CLI_ARTIFACT: unsigned_vscode_cli_win32_x64_cli
               VSCODE_CHECK_ONLY: false
-              RELEASE_DEBUG_FLAG: '--debug'
+              RELEASE_DEBUG_FLAG: ''
               VSCODE_CLI_ENV:
                 OPENSSL_LIB_DIR: $(Build.ArtifactStagingDirectory)/openssl/x64-windows-static/lib
                 OPENSSL_INCLUDE_DIR: $(Build.ArtifactStagingDirectory)/openssl/x64-windows-static/include
