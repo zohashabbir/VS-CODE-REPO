@@ -251,7 +251,7 @@ stages:
           - task: APIScan@2
             inputs:
               softwareFolder: $(agent.builddirectory)\scanbin
-              softwareName: "VS Code"
+              softwareName: 'vscode-client'
               softwareVersionNum: '1'
               symbolsFolder: SRV*$(agent.builddirectory)\symbols*http://symweb
               isLargeApp: false
