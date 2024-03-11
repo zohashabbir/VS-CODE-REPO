@@ -104,6 +104,15 @@ class VoiceChatSessionControllerFactory {
 
 		// Currently Focused Context
 		if (context === 'focused') {
+			// This needs to be first because the chat input can be focused
+			// while the terminal chat is active, #207362
+			const activeInstance = terminalService.activeInstance;
+			if (activeInstance) {
+				const terminalChat = TerminalChatController.activeChatWidget;
+				if (terminalChat?.hasFocus()) {
+					return VoiceChatSessionControllerFactory.doCreateForTerminalChat(terminalChat);
+				}
+			}
 
 			// Try with the chat widget service, which currently
 			// only supports the chat view and quick chat
@@ -133,15 +142,6 @@ class VoiceChatSessionControllerFactory {
 				const inlineChat = InlineChatController.get(activeCodeEditor);
 				if (inlineChat?.hasFocus()) {
 					return VoiceChatSessionControllerFactory.doCreateForInlineChat(inlineChat);
-				}
-			}
-
-			// Try with the terminal chat
-			const activeInstance = terminalService.activeInstance;
-			if (activeInstance) {
-				const terminalChat = TerminalChatController.activeChatWidget || TerminalChatController.get(activeInstance);
-				if (terminalChat?.hasFocus()) {
-					return VoiceChatSessionControllerFactory.doCreateForTerminalChat(terminalChat);
 				}
 			}
 		}

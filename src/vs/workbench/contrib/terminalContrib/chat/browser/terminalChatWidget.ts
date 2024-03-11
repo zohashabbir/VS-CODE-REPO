@@ -55,6 +55,8 @@ export class TerminalChatWidget extends Disposable {
 		this._container.appendChild(this._inlineChatWidget.domNode);
 
 		this._focusTracker = this._register(trackFocus(this._container));
+		this._register(this._focusTracker.onDidFocus(() => this._focusedContextKey.set(true)));
+		this._register(this._focusTracker.onDidBlur(() => this._focusedContextKey.set(false)));
 	}
 
 	private _reset() {
@@ -117,7 +119,7 @@ export class TerminalChatWidget extends Disposable {
 		}
 	}
 	hasFocus(): boolean {
-		return this._inlineChatWidget.hasFocus();
+		return TerminalChatContextKeys.focused.getValue(this._contextKeyService) ?? false;
 	}
 	input(): string {
 		return this._inlineChatWidget.value;
