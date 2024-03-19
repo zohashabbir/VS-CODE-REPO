@@ -43,8 +43,18 @@ declare module 'vscode' {
 		/**
 		 * A per-extension stream of raw data (including escape sequences) that is written to the
 		 * terminal. This will only include data that was written after `stream` was called for the
-		 * first time, ie. you must call `stream` immediately after the command is executed via
-		 * {@link executeCommand} or {@link onDidStartTerminalShellExecution}`to not miss any data.
+		 * first time, ie. you must call `dataStream` immediately after the command is executed via
+		 * {@link executeCommand} or {@link onDidStartTerminalShellExecution} to not miss any data.
+		 *
+		 * @example
+		 * // Log all data written to the terminal for a command
+		 * const command = term.shellIntegration.executeCommand({ commandLine: 'echo "Hello world"' });
+		 * for await (const e of command.dataStream) {
+		 *   console.log(e.data);
+		 *   if (e.truncatedCount) {
+		 *     console.warn(`Data was truncated by ${e.truncatedCount} characters`);
+		 *   }
+		 * }
 		 */
 		dataStream: AsyncIterator<TerminalShellExecutionData>;
 	}
@@ -64,7 +74,7 @@ declare module 'vscode' {
 	}
 
 	export interface TerminalShellExecutionOptions {
-		// TODO: These could be split into 2 separate interfaces, or 2 separate option interfaces?
+		// TODO: These could be split into 2 separate interfaces, or 2 separate options interfaces?
 		/**
 		 * The command line to use.
 		 */
@@ -78,10 +88,16 @@ declare module 'vscode' {
 			 * the executable type.
 			 */
 			args: string[];
-		}
+		};
 	}
 
 	export interface Terminal {
+		/**
+		 * An object that contains [shell integration](https://code.visualstudio.com/docs/terminal/shell-integration)-powered
+		 * features for the terminal. This will always be undefined immediately after the terminal
+		 * is created. Listen to {@link window.onDidActivateTerminalShellIntegration} to be notified
+		 * when shell integration is activated for a terminal.
+		 */
 		shellIntegration?: TerminalShellIntegration;
 	}
 
@@ -96,17 +112,42 @@ declare module 'vscode' {
 		 * @param options The options to use for the command.
 		 *
 		 * @example
-		 * const command = term.executeCommand({
-		 *   commandLine: 'echo "Hello world"'
-		 * });
-		 * // Fallback to sendText on possible failure
-		 * command.exitCode
-		 *   .catch(() => term.sendText('echo "Hello world"'));
+		 * // Execute a command in a terminal immediately after being created
+		 * const myTerm = window.createTerminal();
+		 * window.onDidActivateTerminalShellIntegration(async ({ terminal, shellIntegration }) => {
+		 *   if (terminal === myTerm) {
+		 *     const command = shellIntegration.executeCommand({
+		 *       commandLine: 'echo "Hello world"'
+		 *     });
+		 *     const code = await command.exitCode;
+		 *     console.log(`Command exited with code ${code}`);
+		 *   }
+		 * }));
+		 * // Fallback to sendText if there is no shell integration
+		 * setTimeout(() => {
+		 *   if (!myTerm.shellIntegration) {
+		 *     myTerm.sendText('echo "Hello world"');
+		 *     // Without shell integration, we can't know when the command has finished
+		 *   }
+		 * }, 3000);
+		 *
+		 * @example
+		 * // Send command to terminal that has been alive for a while
+		 * const commandLine = 'echo "Hello world"';
+		 * if (term.shellIntegration) {
+		 *   const command = term.shellIntegration.executeCommand({ commandLine });
+		 *   command.exitCode.then(code => {
+		 *     console.log(`Command exited with code ${code}`);
+		 *   });
+		 * } else {
+		 *   term.sendText(commandLine);
+		 *   // Without shell integration, we can't know when the command has finished
+		 * }
 		 */
 		executeCommand(options: TerminalShellExecutionOptions): TerminalShellExecution;
 	}
 
-	export interface TerminalShellIntegrationEvent {
+	export interface TerminalShellIntegrationActivationEvent {
 		/**
 		 * The terminal that shell integration has been activated in.
 		 */
@@ -118,10 +159,21 @@ declare module 'vscode' {
 	}
 
 	export namespace window {
+		// TODO: This could be onDidChange... and also report changes to features:
+		//
+		// ```ts
+		// features: {
+		// 	cwdReporting: boolean;
+		// 	explicitCommandLineReporting: boolean;
+		// };
+		// ```
+		//
+		// Maybe extensions shouldn't be concerned about these features though?
+
 		/**
-		 * Fires when shell integration activates in a terminal
+		 * Fires when shell integration activates in a terminal.
 		 */
-		export const onDidActivateTerminalShellIntegration: Event<TerminalShellIntegrationEvent>;
+		export const onDidActivateTerminalShellIntegration: Event<TerminalShellIntegrationActivationEvent>;
 
 		/**
 		 * This will be fired when a terminal command is started. This event will fire only when
