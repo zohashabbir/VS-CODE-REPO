@@ -193,21 +193,10 @@ declare module 'vscode' {
 	}
 
 	export namespace window {
-		// TODO: This could be onDidChange... and also report changes to features:
-		//
-		// ```ts
-		// features: {
-		// 	cwdReporting: boolean;
-		// 	explicitCommandLineReporting: boolean;
-		// };
-		// ```
-		//
-		// Maybe extensions shouldn't be concerned about these features though?
-
 		/**
-		 * Fires when shell integration activates in a terminal.
+		 * Fires when shell integration activates or changes in a terminal.
 		 */
-		export const onDidActivateTerminalShellIntegration: Event<TerminalShellIntegrationActivationEvent>;
+		export const onDidChangeTerminalShellIntegration: Event<TerminalShellIntegrationActivationEvent>;
 
 		/**
 		 * This will be fired when a terminal command is started. This event will fire only when
