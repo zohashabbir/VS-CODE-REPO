@@ -39,28 +39,11 @@ declare module 'vscode' {
 		 * @example
 		 * // Log all data written to the terminal for a command
 		 * const command = term.shellIntegration.executeCommand({ commandLine: 'echo "Hello world"' });
-		 * for await (const e of command.dataStream) {
-		 *   console.log(e.data);
-		 *   if (e.truncatedCount) {
-		 *     console.warn(`Data was truncated by ${e.truncatedCount} characters`);
-		 *   }
+		 * for await (const data of command.dataStream) {
+		 *   console.log(data);
 		 * }
 		 */
-		dataStream: AsyncIterator<TerminalShellExecutionData>;
-	}
-
-	export interface TerminalShellExecutionData {
-		/**
-		 * The data that was written to the terminal.
-		 */
-		data: string;
-
-		/**
-		 * The number of characters that were truncated. This can happen when the process writes a
-		 * large amount of data very quickly. If this is non-zero, the data will be the empty
-		 * string.
-		 */
-		truncatedCount: number;
+		dataStream: AsyncIterator<string>;
 	}
 
 	export interface Terminal {
@@ -74,6 +57,7 @@ declare module 'vscode' {
 	}
 
 	export interface TerminalShellIntegration {
+		// TODO: Is this fine to share the TerminalShellIntegrationChangeEvent event?
 		/**
 		 * The current working directory of the terminal. This will be a {@link Uri} if the string
 		 * reported by the shell can reliably be mapped to the connected machine.
@@ -176,7 +160,7 @@ declare module 'vscode' {
 		executeCommand(executable: string, args: string[]): TerminalShellExecution;
 	}
 
-	export interface TerminalShellIntegrationActivationEvent {
+	export interface TerminalShellIntegrationChangeEvent {
 		/**
 		 * The terminal that shell integration has been activated in.
 		 */
@@ -191,7 +175,7 @@ declare module 'vscode' {
 		/**
 		 * Fires when shell integration activates or one of its properties changes in a terminal.
 		 */
-		export const onDidChangeTerminalShellIntegration: Event<TerminalShellIntegrationActivationEvent>;
+		export const onDidChangeTerminalShellIntegration: Event<TerminalShellIntegrationChangeEvent>;
 
 		/**
 		 * This will be fired when a terminal command is started. This event will fire only when
