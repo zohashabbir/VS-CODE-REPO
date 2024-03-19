@@ -58,6 +58,7 @@ declare module 'vscode' {
 
 	export interface TerminalShellIntegration {
 		// TODO: Is this fine to share the TerminalShellIntegrationChangeEvent event?
+		// TODO: Should we have TerminalShellExecution.cwd if this exists?
 		/**
 		 * The current working directory of the terminal. This will be a {@link Uri} if the string
 		 * reported by the shell can reliably be mapped to the connected machine.
