@@ -73,24 +73,6 @@ declare module 'vscode' {
 		truncatedCount: number;
 	}
 
-	export interface TerminalShellExecutionOptions {
-		// TODO: These could be split into 2 separate interfaces, or 2 separate options interfaces?
-		/**
-		 * The command line to use.
-		 */
-		commandLine: string | {
-			/**
-			 * An executable to use.
-			 */
-			executable: string;
-			/**
-			 * Arguments to launch the executable with which will be automatically escaped based on
-			 * the executable type.
-			 */
-			args: string[];
-		};
-	}
-
 	export interface Terminal {
 		/**
 		 * An object that contains [shell integration](https://code.visualstudio.com/docs/terminal/shell-integration)-powered
@@ -109,25 +91,25 @@ declare module 'vscode' {
 		 * must be activated. Check whether {@link TerminalShellExecution.exitCode} is rejected to
 		 * verify whether it was successful.
 		 *
-		 * @param options The options to use for the command.
+		 * @param commandLine The command line to execute, this is the exact text that will be sent
+		 * to the terminal.
 		 *
 		 * @example
 		 * // Execute a command in a terminal immediately after being created
 		 * const myTerm = window.createTerminal();
 		 * window.onDidActivateTerminalShellIntegration(async ({ terminal, shellIntegration }) => {
 		 *   if (terminal === myTerm) {
-		 *     const command = shellIntegration.executeCommand({
-		 *       commandLine: 'echo "Hello world"'
-		 *     });
+		 *     const command = shellIntegration.executeCommand('echo "Hello world"');
 		 *     const code = await command.exitCode;
 		 *     console.log(`Command exited with code ${code}`);
 		 *   }
 		 * }));
-		 * // Fallback to sendText if there is no shell integration
+		 * // Fallback to sendText if there is no shell integration within 3 seconds of launching
 		 * setTimeout(() => {
 		 *   if (!myTerm.shellIntegration) {
 		 *     myTerm.sendText('echo "Hello world"');
-		 *     // Without shell integration, we can't know when the command has finished
+		 *     // Without shell integration, we can't know when the command has finished or what the
+		 *     // exit code was.
 		 *   }
 		 * }, 3000);
 		 *
@@ -136,15 +118,67 @@ declare module 'vscode' {
 		 * const commandLine = 'echo "Hello world"';
 		 * if (term.shellIntegration) {
 		 *   const command = term.shellIntegration.executeCommand({ commandLine });
-		 *   command.exitCode.then(code => {
-		 *     console.log(`Command exited with code ${code}`);
-		 *   });
+		 *   const code = await command.exitCode;
+		 *   console.log(`Command exited with code ${code}`);
 		 * } else {
 		 *   term.sendText(commandLine);
-		 *   // Without shell integration, we can't know when the command has finished
+		 *   // Without shell integration, we can't know when the command has finished or what the
+		 *   // exit code was.
 		 * }
 		 */
-		executeCommand(options: TerminalShellExecutionOptions): TerminalShellExecution;
+		executeCommand(commandLine: string): TerminalShellExecution;
+
+
+		/**
+		 * Execute a command, sending ^C as necessary to interrupt any running command if needed.
+		 *
+		 * *Note* This is not guaranteed to work as [shell integration](https://code.visualstudio.com/docs/terminal/shell-integration)
+		 * must be activated. Check whether {@link TerminalShellExecution.exitCode} is rejected to
+		 * verify whether it was successful.
+		 *
+		 * @param command A command to run.
+		 * @param args Arguments to launch the executable with which will be automatically escaped
+		 * based on the executable type.
+		 *
+		 * @example
+		 * // Execute a command in a terminal immediately after being created
+		 * const myTerm = window.createTerminal();
+		 * window.onDidActivateTerminalShellIntegration(async ({ terminal, shellIntegration }) => {
+		 *   if (terminal === myTerm) {
+		 *     const command = shellIntegration.executeCommand({
+		 *       command: 'echo',
+		 *       args: ['Hello world']
+		 *     });
+		 *     const code = await command.exitCode;
+		 *     console.log(`Command exited with code ${code}`);
+		 *   }
+		 * }));
+		 * // Fallback to sendText if there is no shell integration within 3 seconds of launching
+		 * setTimeout(() => {
+		 *   if (!myTerm.shellIntegration) {
+		 *     myTerm.sendText('echo "Hello world"');
+		 *     // Without shell integration, we can't know when the command has finished or what the
+		 *     // exit code was.
+		 *   }
+		 * }, 3000);
+		 *
+		 * @example
+		 * // Send command to terminal that has been alive for a while
+		 * const commandLine = 'echo "Hello world"';
+		 * if (term.shellIntegration) {
+		 *   const command = term.shellIntegration.executeCommand({
+		 *     command: 'echo',
+		 *     args: ['Hello world']
+		 *   });
+		 *   const code = await command.exitCode;
+		 *   console.log(`Command exited with code ${code}`);
+		 * } else {
+		 *   term.sendText(commandLine);
+		 *   // Without shell integration, we can't know when the command has finished or what the
+		 *   // exit code was.
+		 * }
+		 */
+		executeCommand(executable: string, args: string[]): TerminalShellExecution;
 	}
 
 	export interface TerminalShellIntegrationActivationEvent {
