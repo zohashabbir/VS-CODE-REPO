@@ -157,4 +157,17 @@ declare module 'vscode' {
 		terminal: Terminal;
 		activeBuffer: TerminalBuffer;
 	}
+
+	export interface TerminalShellExecution {
+		/**
+		 * The output of the command when it has finished executing. This is the plain text shown in
+		 * the terminal buffer and does not include raw escape sequences. Depending on the shell
+		 * setup, this may include the command line as part of the output.
+		 *
+		 * *Note* This will be rejected if the terminal is determined to not have shell integration
+		 * activated.
+		 */
+		// output: Thenable<string>;
+		// TODO: TBD based on terminal buffer exploration.
+	}
 }

@@ -14,13 +14,14 @@ declare module 'vscode' {
 		terminal: Terminal;
 
 		/**
-		 * The full command line that was executed, including both the command and the arguments.
+		 * The full command line that was executed, including both the command and arguments.
 		 */
 		commandLine: string | undefined;
 
 		/**
-		 * The current working directory that was reported by the shell. This will be a {@link Uri}
-		 * if the string reported by the shell can reliably be mapped to the connected machine.
+		 * The working directory that was reported by the shell when this command executed. This
+		 * will be a {@link Uri} if the string reported by the shell can reliably be mapped to the
+		 * connected machine.
 		 */
 		cwd: Uri | string | undefined;
 
@@ -28,17 +29,6 @@ declare module 'vscode' {
 		 * The exit code reported by the shell.
 		 */
 		exitCode: Thenable<number | undefined>;
-
-		/**
-		 * The output of the command when it has finished executing. This is the plain text shown in
-		 * the terminal buffer and does not include raw escape sequences. Depending on the shell
-		 * setup, this may include the command line as part of the output.
-		 *
-		 * *Note* This will be rejected if the terminal is determined to not have shell integration
-		 * activated.
-		 */
-		// output: Thenable<string>;
-		// TODO: TBD based on terminal buffer exploration.
 
 		/**
 		 * A per-extension stream of raw data (including escape sequences) that is written to the
@@ -85,6 +75,12 @@ declare module 'vscode' {
 
 	export interface TerminalShellIntegration {
 		/**
+		 * The current working directory of the terminal. This will be a {@link Uri} if the string
+		 * reported by the shell can reliably be mapped to the connected machine.
+		 */
+		cwd: Uri | string | undefined;
+
+		/**
 		 * Execute a command, sending ^C as necessary to interrupt any running command if needed.
 		 *
 		 * *Note* This is not guaranteed to work as [shell integration](https://code.visualstudio.com/docs/terminal/shell-integration)
@@ -127,7 +123,6 @@ declare module 'vscode' {
 		 * }
 		 */
 		executeCommand(commandLine: string): TerminalShellExecution;
-
 
 		/**
 		 * Execute a command, sending ^C as necessary to interrupt any running command if needed.
@@ -194,7 +189,7 @@ declare module 'vscode' {
 
 	export namespace window {
 		/**
-		 * Fires when shell integration activates or changes in a terminal.
+		 * Fires when shell integration activates or one of its properties changes in a terminal.
 		 */
 		export const onDidChangeTerminalShellIntegration: Event<TerminalShellIntegrationActivationEvent>;
 
