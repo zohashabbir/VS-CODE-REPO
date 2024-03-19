@@ -53,7 +53,7 @@ declare module 'vscode' {
 		 * is created. Listen to {@link window.onDidActivateTerminalShellIntegration} to be notified
 		 * when shell integration is activated for a terminal.
 		 */
-		shellIntegration?: TerminalShellIntegration;
+		shellIntegration: TerminalShellIntegration | undefined;
 	}
 
 	export interface TerminalShellIntegration {
