@@ -27,8 +27,8 @@ declare module 'vscode' {
 	//
 	// One of the niceties of doing this is that the extension host is close to the pty host, so
 	// there is low latency in sending updates to the extension host, even on remote connections by
-	// sending data between these processes pty host -> server -> ext host. If all data events are
-	// in order then xterm.js will guarantee that they remain in sync.
+	// sending data between these processes ptyhost->server->exthost. If all data events are in
+	// order then xterm.js will guarantee that they remain in sync.
 
 	export interface Terminal {
 		readonly buffers: TerminalBufferSet;
@@ -38,6 +38,24 @@ declare module 'vscode' {
 		 * always refers to the {@link TerminalBufferSet.active active buffer}.
 		 */
 		readonly selection: TerminalBufferRange | undefined;
+
+		// TODO: This is an alternative to onDidWriteTerminalData that aligns closer to
+		//       shellIntegration proposal. Bring to API async
+		// TODO: Is it a problem that we cannot dispose this iterator?
+		/**
+		 * A per-extension stream of raw data (including escape sequences) that is written to the
+		 * terminal. This will only include data that was written after `dataStream` was called for
+		 * the first time, ie. you must call `dataStream` immediately after the terminal is created
+		 * via {@link createTerminal} or {@link onDidOpenTerminal} to not miss any data.
+		 *
+		 * @example
+		 * // Log all data written to the terminal
+		 * const term.createTerminal();
+		 * for await (const data of term.dataStream) {
+		 *   console.log(data);
+		 * }
+		 */
+		dataStream: AsyncIterator<string>;
 	}
 
 	export interface TerminalSelection {
