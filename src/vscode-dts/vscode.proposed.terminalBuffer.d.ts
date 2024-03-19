@@ -32,6 +32,17 @@ declare module 'vscode' {
 
 	export interface Terminal {
 		readonly buffers: TerminalBufferSet;
+
+		/**
+		 * The selected range of the terminal or undefined if there is no selection. This range
+		 * always refers to the {@link TerminalBufferSet.active active buffer}.
+		 */
+		readonly selection: TerminalBufferRange | undefined;
+	}
+
+	export interface TerminalSelection {
+		buffer: TerminalBuffer;
+		range: TerminalBufferRange;
 	}
 
 	export interface TerminalBufferSet {
@@ -148,14 +159,24 @@ declare module 'vscode' {
 
 	export namespace window {
 		/**
-		 * Fires when {@link Terminal} {@link TerminalBufferSet.active} changes.
+		 * Fires when {@link TerminalBufferSet.active} changes.
 		 */
 		export const onDidChangeTerminalBuffer: Event<TerminalBufferChangeEvent>;
+
+		/**
+		 * Fires when {@link Terminal.selection} changes.
+		 */
+		export const onDidChangeTerminalSelection: Event<TerminalSelectionChangeEvent>;
 	}
 
 	export interface TerminalBufferChangeEvent {
 		terminal: Terminal;
 		activeBuffer: TerminalBuffer;
+	}
+
+	export interface TerminalSelectionChangeEvent {
+		terminal: Terminal;
+		selection: TerminalBufferRange | undefined;
 	}
 
 	export interface TerminalShellExecution {
