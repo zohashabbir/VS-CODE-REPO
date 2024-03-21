@@ -253,7 +253,7 @@ stages:
               softwareFolder: $(agent.builddirectory)\scanbin
               softwareName: 'vscode-client'
               softwareVersionNum: '1'
-              symbolsFolder: SRV*$(agent.builddirectory)\symbols*http://symweb
+              symbolsFolder: 'SRV*http://symweb;$(agent.builddirectory)\symbols'
               isLargeApp: false
               toolVersion: 'Latest'
             displayName: Run ApiScan
