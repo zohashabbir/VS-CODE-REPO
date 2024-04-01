@@ -27,7 +27,6 @@ export const enum TerminalChatCommandId {
 	NextFromHistory = 'workbench.action.terminal.chat.nextFromHistory',
 }
 
-export const MENU_TERMINAL_CHAT_INPUT = MenuId.for('terminalChatInput');
 export const MENU_TERMINAL_CHAT_WIDGET = MenuId.for('terminalChatWidget');
 export const MENU_TERMINAL_CHAT_WIDGET_STATUS = MenuId.for('terminalChatWidget.status');
 export const MENU_TERMINAL_CHAT_WIDGET_FEEDBACK = MenuId.for('terminalChatWidget.feedback');

@@ -621,11 +621,6 @@ export class StartVoiceChatAction extends Action2 {
 				when: ContextKeyExpr.and(HasSpeechProvider, CONTEXT_VOICE_CHAT_IN_VIEW_IN_PROGRESS.negate(), CONTEXT_QUICK_VOICE_CHAT_IN_PROGRESS.negate(), CONTEXT_VOICE_CHAT_IN_EDITOR_IN_PROGRESS.negate()),
 				group: 'navigation',
 				order: -1
-			}, {
-				id: MenuId.for('terminalChatInput'),
-				when: ContextKeyExpr.and(HasSpeechProvider, CONTEXT_TERMINAL_VOICE_CHAT_IN_PROGRESS.negate()),
-				group: 'navigation',
-				order: -1
 			}]
 		});
 	}
@@ -664,11 +659,6 @@ export class InstallVoiceChatAction extends Action2 {
 			precondition: InstallingSpeechProvider.negate(),
 			menu: [{
 				id: MenuId.ChatExecute,
-				when: HasSpeechProvider.negate(),
-				group: 'navigation',
-				order: -1
-			}, {
-				id: MenuId.for('terminalChatInput'),
 				when: HasSpeechProvider.negate(),
 				group: 'navigation',
 				order: -1
@@ -763,7 +753,7 @@ export class StopListeningInTerminalChatAction extends BaseStopListeningAction {
 	static readonly ID = 'workbench.action.chat.stopListeningInTerminalChat';
 
 	constructor() {
-		super({ id: StopListeningInTerminalChatAction.ID, icon: spinningLoading }, 'terminal', CONTEXT_TERMINAL_VOICE_CHAT_IN_PROGRESS, MenuId.for('terminalChatInput'));
+		super({ id: StopListeningInTerminalChatAction.ID, icon: spinningLoading }, 'terminal', CONTEXT_TERMINAL_VOICE_CHAT_IN_PROGRESS, MenuId.ChatExecute);
 	}
 }
 
