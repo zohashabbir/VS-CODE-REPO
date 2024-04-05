@@ -30,6 +30,7 @@ import { InlineSuggestionHintsContentWidget } from 'vs/editor/contrib/inlineComp
 import { IKeybindingService } from 'vs/platform/keybinding/common/keybinding';
 import { ResultKind } from 'vs/platform/keybinding/common/keybindingResolver';
 import { RunOnceScheduler } from 'vs/base/common/async';
+import { CommandsRegistry } from 'vs/platform/commands/common/commands';
 import * as nls from 'vs/nls';
 import 'vs/css!./hover';
 
@@ -118,7 +119,7 @@ export class HoverController extends Disposable implements IEditorContribution {
 		this._listenersStore.add(this._editor.onMouseLeave((e) => this._onEditorMouseLeave(e)));
 		this._listenersStore.add(this._editor.onDidChangeModel(() => {
 			this._cancelScheduler();
-			this._hideWidgets();
+			this.hideHoverWidgets();
 		}));
 		this._listenersStore.add(this._editor.onDidChangeModelContent(() => this._cancelScheduler()));
 		this._listenersStore.add(this._editor.onDidScrollChange((e: IScrollEvent) => this._onEditorScrollChanged(e)));
@@ -135,7 +136,7 @@ export class HoverController extends Disposable implements IEditorContribution {
 
 	private _onEditorScrollChanged(e: IScrollEvent): void {
 		if (e.scrollTopChanged || e.scrollLeftChanged) {
-			this._hideWidgets();
+			this.hideHoverWidgets();
 		}
 	}
 
@@ -163,7 +164,7 @@ export class HoverController extends Disposable implements IEditorContribution {
 			return;
 		}
 
-		this._hideWidgets();
+		this.hideHoverWidgets();
 	}
 
 	private _onEditorMouseUp(): void {
@@ -183,7 +184,7 @@ export class HoverController extends Disposable implements IEditorContribution {
 		if (_sticky) {
 			return;
 		}
-		this._hideWidgets();
+		this.hideHoverWidgets();
 	}
 
 	private _isMouseOverWidget(mouseEvent: IEditorMouseEvent): boolean {
@@ -283,7 +284,7 @@ export class HoverController extends Disposable implements IEditorContribution {
 				!mouseOnDecorator && !enabled && !activatedByDecoratorClick
 			)
 		) {
-			this._hideWidgets();
+			this.hideHoverWidgets();
 			return;
 		}
 
@@ -309,7 +310,7 @@ export class HoverController extends Disposable implements IEditorContribution {
 		if (_sticky) {
 			return;
 		}
-		this._hideWidgets();
+		this.hideHoverWidgets();
 	}
 
 	private _onKeyDown(e: IKeyboardEvent): void {
@@ -341,13 +342,18 @@ export class HoverController extends Disposable implements IEditorContribution {
 			return;
 		}
 
-		this._hideWidgets();
+		this.hideHoverWidgets();
 	}
 
-	private _hideWidgets(): void {
+	public hideHoverWidgets(): void {
 		if (_sticky) {
 			return;
 		}
+		this.hideContentHoverWidget();
+		this.hideGlyphHoverWidget();
+	}
+
+	public hideContentHoverWidget(): void {
 		if (
 			(
 				this._hoverState.mouseDown
@@ -360,8 +366,11 @@ export class HoverController extends Disposable implements IEditorContribution {
 		}
 		this._hoverState.activatedByDecoratorClick = false;
 		this._hoverState.contentHoverFocused = false;
-		this._glyphWidget?.hide();
 		this._contentWidget?.hide();
+	}
+
+	public hideGlyphHoverWidget(): void {
+		this._glyphWidget?.hide();
 	}
 
 	private _getOrCreateContentWidget(): ContentHoverController {
@@ -376,10 +385,6 @@ export class HoverController extends Disposable implements IEditorContribution {
 			this._glyphWidget = new MarginHoverWidget(this._editor, this._languageService, this._openerService);
 		}
 		return this._glyphWidget;
-	}
-
-	public hideContentHover(): void {
-		this._hideWidgets();
 	}
 
 	public showContentHover(
@@ -450,27 +455,29 @@ export class HoverController extends Disposable implements IEditorContribution {
 	}
 }
 
-enum HoverFocusBehavior {
+enum ContentHoverFocusBehavior {
 	NoAutoFocus = 'noAutoFocus',
 	FocusIfVisible = 'focusIfVisible',
 	AutoFocusImmediately = 'autoFocusImmediately'
 }
 
-class ShowOrFocusHoverAction extends EditorAction {
+CommandsRegistry.registerCommandAlias('editor.action.showHover', 'editor.action.showOrFocusContentHover');
+
+class ShowOrFocusContentHoverAction extends EditorAction {
 
 	constructor() {
 		super({
-			id: 'editor.action.showHover',
+			id: 'editor.action.showOrFocusContentHover',
 			label: nls.localize({
-				key: 'showOrFocusHover',
+				key: 'showOrFocusContentHover',
 				comment: [
 					'Label for action that will trigger the showing/focusing of a hover in the editor.',
 					'If the hover is not visible, it will show the hover.',
 					'This allows for users to show the hover without using the mouse.'
 				]
-			}, "Show or Focus Hover"),
+			}, "Show or Focus Content Hover"),
 			metadata: {
-				description: `Show or Focus Hover`,
+				description: `Show or Focus Content Hover`,
 				args: [{
 					name: 'args',
 					schema: {
@@ -478,19 +485,19 @@ class ShowOrFocusHoverAction extends EditorAction {
 						properties: {
 							'focus': {
 								description: 'Controls if and when the hover should take focus upon being triggered by this action.',
-								enum: [HoverFocusBehavior.NoAutoFocus, HoverFocusBehavior.FocusIfVisible, HoverFocusBehavior.AutoFocusImmediately],
+								enum: [ContentHoverFocusBehavior.NoAutoFocus, ContentHoverFocusBehavior.FocusIfVisible, ContentHoverFocusBehavior.AutoFocusImmediately],
 								enumDescriptions: [
-									nls.localize('showOrFocusHover.focus.noAutoFocus', 'The hover will not automatically take focus.'),
-									nls.localize('showOrFocusHover.focus.focusIfVisible', 'The hover will take focus only if it is already visible.'),
-									nls.localize('showOrFocusHover.focus.autoFocusImmediately', 'The hover will automatically take focus when it appears.'),
+									nls.localize('showOrFocusContentHover.focus.noAutoFocus', 'The hover will not automatically take focus.'),
+									nls.localize('showOrFocusContentHover.focus.focusIfVisible', 'The hover will take focus only if it is already visible.'),
+									nls.localize('showOrFocusContentHover.focus.autoFocusImmediately', 'The hover will automatically take focus when it appears.'),
 								],
-								default: HoverFocusBehavior.FocusIfVisible,
+								default: ContentHoverFocusBehavior.FocusIfVisible,
 							}
 						},
 					}
 				}]
 			},
-			alias: 'Show or Focus Hover',
+			alias: 'Show or Focus Content Hover',
 			precondition: undefined,
 			kbOpts: {
 				kbExpr: EditorContextKeys.editorTextFocus,
@@ -511,11 +518,11 @@ class ShowOrFocusHoverAction extends EditorAction {
 		}
 
 		const focusArgument = args?.focus;
-		let focusOption = HoverFocusBehavior.FocusIfVisible;
-		if (Object.values(HoverFocusBehavior).includes(focusArgument)) {
+		let focusOption = ContentHoverFocusBehavior.FocusIfVisible;
+		if (Object.values(ContentHoverFocusBehavior).includes(focusArgument)) {
 			focusOption = focusArgument;
 		} else if (typeof focusArgument === 'boolean' && focusArgument) {
-			focusOption = HoverFocusBehavior.AutoFocusImmediately;
+			focusOption = ContentHoverFocusBehavior.AutoFocusImmediately;
 		}
 
 		const showContentHover = (focus: boolean) => {
@@ -527,14 +534,35 @@ class ShowOrFocusHoverAction extends EditorAction {
 		const accessibilitySupportEnabled = editor.getOption(EditorOption.accessibilitySupport) === AccessibilitySupport.Enabled;
 
 		if (controller.isHoverVisible) {
-			if (focusOption !== HoverFocusBehavior.NoAutoFocus) {
+			if (focusOption !== ContentHoverFocusBehavior.NoAutoFocus) {
 				controller.focus();
 			} else {
 				showContentHover(accessibilitySupportEnabled);
 			}
 		} else {
-			showContentHover(accessibilitySupportEnabled || focusOption === HoverFocusBehavior.AutoFocusImmediately);
+			showContentHover(accessibilitySupportEnabled || focusOption === ContentHoverFocusBehavior.AutoFocusImmediately);
 		}
+	}
+}
+
+class HideContentHoverAction extends EditorAction {
+
+	constructor() {
+		super({
+			id: 'editor.action.hideContentHover',
+			label: nls.localize({
+				key: 'hideContentHover',
+				comment: [
+					'Label for action that will hide the hover in the editor if visible.'
+				]
+			}, "Hide Content Hover"),
+			alias: 'Hide Content Hover',
+			precondition: undefined
+		});
+	}
+
+	public run(accessor: ServicesAccessor, editor: ICodeEditor): void {
+		HoverController.get(editor)?.hideContentHoverWidget();
 	}
 }
 
@@ -826,8 +854,9 @@ class GoToBottomHoverAction extends EditorAction {
 }
 
 registerEditorContribution(HoverController.ID, HoverController, EditorContributionInstantiation.BeforeFirstInteraction);
-registerEditorAction(ShowOrFocusHoverAction);
+registerEditorAction(ShowOrFocusContentHoverAction);
 registerEditorAction(ShowDefinitionPreviewHoverAction);
+registerEditorAction(HideContentHoverAction);
 registerEditorAction(ScrollUpHoverAction);
 registerEditorAction(ScrollDownHoverAction);
 registerEditorAction(ScrollLeftHoverAction);
