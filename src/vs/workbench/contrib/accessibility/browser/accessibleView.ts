@@ -486,13 +486,8 @@ export class AccessibleView extends Disposable {
 			this._accessibleViewIsShown.set(shown);
 			this._accessiblityHelpIsShown.reset();
 		}
-		if (provider.next && provider.previous) {
-			this._accessibleViewSupportsNavigation.set(true);
-		} else {
-			this._accessibleViewSupportsNavigation.reset();
-		}
-		const verbosityEnabled: boolean = this._configurationService.getValue(provider.verbositySettingKey);
-		this._accessibleViewVerbosityEnabled.set(verbosityEnabled);
+		this._accessibleViewSupportsNavigation.set(this._currentProvider?.next !== undefined || this._currentProvider?.previous !== undefined);
+		this._accessibleViewVerbosityEnabled.set(this._configurationService.getValue(provider.verbositySettingKey));
 		this._accessibleViewGoToSymbolSupported.set(this._goToSymbolsSupported() ? this.getSymbols()?.length! > 0 : false);
 	}
 
@@ -540,8 +535,7 @@ export class AccessibleView extends Disposable {
 			model.setLanguage(provider.options.language ?? 'markdown');
 			container.appendChild(this._container);
 			let actionsHint = '';
-			const verbose = this._configurationService.getValue(provider.verbositySettingKey);
-			const hasActions = this._accessibleViewSupportsNavigation.get() || this._accessibleViewVerbosityEnabled.get() || this._accessibleViewGoToSymbolSupported.get() || this._currentProvider?.actions;
+			const hasActions = this._accessibleViewSupportsNavigation.get() || this._accessibleViewVerbosityEnabled.get() || this._accessibleViewGoToSymbolSupported.get() || !!this._currentProvider?.actions?.length;
 			if (verbose && !showAccessibleViewHelp && hasActions) {
 				actionsHint = provider.options.position ? localize('ariaAccessibleViewActionsBottom', 'Explore actions such as disabling this hint (Shift+Tab), use Escape to exit this dialog.') : localize('ariaAccessibleViewActions', 'Explore actions such as disabling this hint (Shift+Tab).');
 			}
