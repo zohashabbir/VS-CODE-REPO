@@ -487,27 +487,32 @@ const innoSetupConfig = {
 	'tr': { codePage: 'CP1254' }
 };
 
+const pathToMetadata = './out-vscode/nls.metadata.json';
+const pathToRehWebMetadata = './out-vscode-reh-web/nls.metadata.json';
+const pathToExtensions = '.build/extensions/*';
+const pathToSetup = 'build/win32/i18n/messages.en.isl';
+
 gulp.task(task.define(
 	'vscode-translations-export',
 	task.series(
 		core,
 		compileExtensionsBuildTask,
-		function () {
-			const pathToMetadata = './out-vscode/nls.metadata.json';
-			const pathToRehWebMetadata = './out-vscode-reh-web/nls.metadata.json';
-			const pathToExtensions = '.build/extensions/*';
-			const pathToSetup = 'build/win32/i18n/messages.en.isl';
-
-			return es.merge(
-				gulp.src([pathToMetadata, pathToRehWebMetadata]).pipe(merge({
-					fileName: 'nls.metadata.json',
-					jsonSpace: '',
-					concatArrays: true
-				})).pipe(i18n.createXlfFilesForCoreBundle()),
-				gulp.src(pathToSetup).pipe(i18n.createXlfFilesForIsl()),
-				gulp.src(pathToExtensions).pipe(i18n.createXlfFilesForExtensions())
-			).pipe(vfs.dest('../vscode-translations-export'));
-		}
+		() => gulp.src([pathToMetadata, pathToRehWebMetadata]).pipe(merge({
+			fileName: 'nls.metadata.json',
+			jsonSpace: '',
+			concatArrays: true
+		})).pipe(i18n.createXlfFilesForCoreBundle()).pipe(vfs.dest('../vscode-translations-export')),
+		() => gulp.src(pathToSetup).pipe(i18n.createXlfFilesForIsl()).pipe(vfs.dest('../vscode-translations-export')),
+		() => gulp.src(pathToExtensions).pipe(i18n.createXlfFilesForExtensions()).pipe(vfs.dest('../vscode-translations-export')),
+		// return es.merge(
+		// 	gulp.src([pathToMetadata, pathToRehWebMetadata]).pipe(merge({
+		// 		fileName: 'nls.metadata.json',
+		// 		jsonSpace: '',
+		// 		concatArrays: true
+		// 	})).pipe(i18n.createXlfFilesForCoreBundle()),
+		// 	gulp.src(pathToSetup).pipe(i18n.createXlfFilesForIsl()),
+		// 	gulp.src(pathToExtensions).pipe(i18n.createXlfFilesForExtensions())
+		// ).pipe(vfs.dest('../vscode-translations-export'));
 	)
 ));
 
