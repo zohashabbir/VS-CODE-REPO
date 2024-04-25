@@ -134,7 +134,7 @@ registerActiveXtermAction({
 	keybinding: {
 		primary: KeyMod.Alt | KeyCode.KeyR,
 		mac: { primary: KeyMod.CtrlCmd | KeyMod.Alt | KeyCode.KeyR },
-		when: TerminalContextKeys.findVisible,
+		when: ContextKeyExpr.or(ContextKeyExpr.and(TerminalContextKeys.findVisible, TerminalContextKeys.focusInAny), TerminalContextKeys.findFocus),
 		weight: KeybindingWeight.WorkbenchContrib
 	},
 	precondition: ContextKeyExpr.or(TerminalContextKeys.processSupported, TerminalContextKeys.terminalHasBeenCreated),
