@@ -200,8 +200,10 @@ function Send-Completions {
 	[Microsoft.PowerShell.PSConsoleReadLine]::GetBufferState([ref]$commandLine, [ref]$cursorIndex)
 	$completionPrefix = $commandLine
 
-	# Get completions
+	# Start completions sequence
 	$result = "$([char]0x1b)]633;Completions"
+
+	# Get completions
 	if ($completionPrefix.Length -gt 0) {
 		# Get and send completions
 		$completions = TabExpansion2 -inputScript $completionPrefix -cursorColumn $cursorIndex
@@ -209,7 +211,27 @@ function Send-Completions {
 			$result += ";$($completions.ReplacementIndex);$($completions.ReplacementLength);$($cursorIndex);"
 			$result += $completions.CompletionMatches | ConvertTo-Json -Compress
 		}
+	} else {
+
+		# TODO: Try use this approach after the last whitespace for everything so intellisense is always consistent
+		# TODO: Remove `-` trigger character and let the client always request
+
+		# Special case when the prefix is empty since TabExpansion2 doesn't handle it
+		if ($completionPrefix.Length -eq 0) {
+			# Get and send completions
+			$completions = $(
+				([System.Management.Automation.CompletionCompleters]::CompleteCommand(''));
+				([System.Management.Automation.CompletionCompleters]::CompleteFilename(''));
+				([System.Management.Automation.CompletionCompleters]::CompleteVariable(''));
+			)
+			if ($null -ne $completions) {
+				$result += ";0;0;0;"
+				$result += $completions | ConvertTo-Json -Compress
+			}
+		}
 	}
+
+	# End completions sequence
 	$result += "`a"
 
 	Write-Host -NoNewLine $result

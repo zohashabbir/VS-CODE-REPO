@@ -136,6 +136,7 @@ export class SuggestAddon extends Disposable implements ITerminalAddon, ISuggest
 
 	private _sync(promptInputState: IPromptInputModelState): void {
 		this._mostRecentPromptInputState = promptInputState;
+		// this._onAcceptedCompletion.fire('\x1b[24~e');
 		if (!this._promptInputModel || !this._terminal || !this._suggestWidget || !this._initialPromptInputState) {
 			return;
 		}
