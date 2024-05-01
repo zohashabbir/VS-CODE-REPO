@@ -4,10 +4,19 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { createDecorator } from 'vs/platform/instantiation/common/instantiation';
+import { ILanguagePackItem } from 'vs/platform/languagePacks/common/languagePacks';
 
 export const ILocaleService = createDecorator<ILocaleService>('localizationService');
 
 export interface ILocaleService {
 	readonly _serviceBrand: undefined;
-	setLocale(languagePackItem: string | undefined): Promise<boolean>;
+	setLocale(languagePackItem: ILanguagePackItem, skipDialog?: boolean): Promise<void>;
+	clearLocalePreference(): Promise<void>;
+}
+
+export const IActiveLanguagePackService = createDecorator<IActiveLanguagePackService>('activeLanguageService');
+
+export interface IActiveLanguagePackService {
+	readonly _serviceBrand: undefined;
+	getExtensionIdProvidingCurrentLocale(): Promise<string | undefined>;
 }

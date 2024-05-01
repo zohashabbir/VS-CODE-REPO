@@ -31,6 +31,7 @@ import { StandardTokenType } from 'vs/editor/common/encodedTokenAttributes';
 
 export const Context = {
 	Visible: historyNavigationVisible,
+	HasFocusedSuggestion: new RawContextKey<boolean>('suggestWidgetHasFocusedSuggestion', false, localize('suggestWidgetHasSelection', "Whether any suggestion is focused")),
 	DetailsVisible: new RawContextKey<boolean>('suggestWidgetDetailsVisible', false, localize('suggestWidgetDetailsVisible', "Whether suggestion details are visible")),
 	MultipleSuggestions: new RawContextKey<boolean>('suggestWidgetMultipleSuggestions', false, localize('suggestWidgetMultipleSuggestions', "Whether there are multiple suggestions to pick from")),
 	MakesTextEdit: new RawContextKey<boolean>('suggestionMakesTextEdit', true, localize('suggestionMakesTextEdit', "Whether inserting the current suggestion yields in a change or has everything already been typed")),
@@ -72,7 +73,7 @@ export class CompletionItem {
 	readonly extensionId?: ExtensionIdentifier;
 
 	// resolving
-	private _isResolved?: boolean;
+	private _resolveDuration?: number;
 	private _resolveCache?: Promise<void>;
 
 	constructor(
@@ -83,7 +84,7 @@ export class CompletionItem {
 	) {
 		this.textLabel = typeof completion.label === 'string'
 			? completion.label
-			: completion.label.label;
+			: completion.label?.label;
 
 		// ensure lower-variants (perf)
 		this.labelLow = this.textLabel.toLowerCase();
@@ -121,33 +122,39 @@ export class CompletionItem {
 		// create the suggestion resolver
 		if (typeof provider.resolveCompletionItem !== 'function') {
 			this._resolveCache = Promise.resolve();
-			this._isResolved = true;
+			this._resolveDuration = 0;
 		}
 	}
 
 	// ---- resolving
 
 	get isResolved(): boolean {
-		return !!this._isResolved;
+		return this._resolveDuration !== undefined;
+	}
+
+	get resolveDuration(): number {
+		return this._resolveDuration !== undefined ? this._resolveDuration : -1;
 	}
 
 	async resolve(token: CancellationToken) {
 		if (!this._resolveCache) {
 			const sub = token.onCancellationRequested(() => {
 				this._resolveCache = undefined;
-				this._isResolved = false;
+				this._resolveDuration = undefined;
 			});
+			const sw = new StopWatch(true);
 			this._resolveCache = Promise.resolve(this.provider.resolveCompletionItem!(this.completion, token)).then(value => {
 				Object.assign(this.completion, value);
-				this._isResolved = true;
-				sub.dispose();
+				this._resolveDuration = sw.elapsed();
 			}, err => {
 				if (isCancellationError(err)) {
 					// the IPC queue will reject the request with the
 					// cancellation error -> reset cached
 					this._resolveCache = undefined;
-					this._isResolved = false;
+					this._resolveDuration = undefined;
 				}
+			}).finally(() => {
+				sub.dispose();
 			});
 		}
 		return this._resolveCache;
@@ -166,6 +173,7 @@ export class CompletionOptions {
 		readonly snippetSortOrder = SnippetSortOrder.Bottom,
 		readonly kindFilter = new Set<languages.CompletionItemKind>(),
 		readonly providerFilter = new Set<languages.CompletionItemProvider>(),
+		readonly providerItemsToReuse: ReadonlyMap<languages.CompletionItemProvider, CompletionItem[]> = new Map<languages.CompletionItemProvider, CompletionItem[]>(),
 		readonly showDeprecated = true
 	) { }
 }
@@ -211,7 +219,7 @@ export async function provideSuggestionItems(
 	token: CancellationToken = CancellationToken.None
 ): Promise<CompletionItemModel> {
 
-	const sw = new StopWatch(true);
+	const sw = new StopWatch();
 	position = position.clone();
 
 	const word = model.getWordAtPosition(position);
@@ -228,7 +236,7 @@ export async function provideSuggestionItems(
 		if (!container) {
 			return didAddResult;
 		}
-		for (let suggestion of container.suggestions) {
+		for (const suggestion of container.suggestions) {
 			if (!options.kindFilter.has(suggestion.kind)) {
 				// skip if not showing deprecated suggestions
 				if (!options.showDeprecated && suggestion?.tags?.includes(languages.CompletionItemTag.Deprecated)) {
@@ -264,10 +272,16 @@ export async function provideSuggestionItems(
 		if (!_snippetSuggestSupport || options.kindFilter.has(languages.CompletionItemKind.Snippet)) {
 			return;
 		}
+		// we have items from a previous session that we can reuse
+		const reuseItems = options.providerItemsToReuse.get(_snippetSuggestSupport);
+		if (reuseItems) {
+			reuseItems.forEach(item => result.push(item));
+			return;
+		}
 		if (options.providerFilter.size > 0 && !options.providerFilter.has(_snippetSuggestSupport)) {
 			return;
 		}
-		const sw = new StopWatch(true);
+		const sw = new StopWatch();
 		const list = await _snippetSuggestSupport.provideCompletionItems(model, position, context, token);
 		onCompletionList(_snippetSuggestSupport, list, sw);
 	})();
@@ -275,16 +289,24 @@ export async function provideSuggestionItems(
 	// add suggestions from contributed providers - providers are ordered in groups of
 	// equal score and once a group produces a result the process stops
 	// get provider groups, always add snippet suggestion provider
-	for (let providerGroup of registry.orderedGroups(model)) {
+	for (const providerGroup of registry.orderedGroups(model)) {
 
 		// for each support in the group ask for suggestions
 		let didAddResult = false;
 		await Promise.all(providerGroup.map(async provider => {
+			// we have items from a previous session that we can reuse
+			if (options.providerItemsToReuse.has(provider)) {
+				const items = options.providerItemsToReuse.get(provider)!;
+				items.forEach(item => result.push(item));
+				didAddResult = didAddResult || items.length > 0;
+				return;
+			}
+			// check if this provider is filtered out
 			if (options.providerFilter.size > 0 && !options.providerFilter.has(provider)) {
 				return;
 			}
 			try {
-				const sw = new StopWatch(true);
+				const sw = new StopWatch();
 				const list = await provider.provideCompletionItems(model, position, context, token);
 				didAddResult = onCompletionList(provider, list, sw) || didAddResult;
 			} catch (err) {
@@ -323,9 +345,9 @@ function defaultComparator(a: CompletionItem, b: CompletionItem): number {
 		}
 	}
 	// check with 'label'
-	if (a.completion.label < b.completion.label) {
+	if (a.textLabel < b.textLabel) {
 		return -1;
-	} else if (a.completion.label > b.completion.label) {
+	} else if (a.textLabel > b.textLabel) {
 		return 1;
 	}
 	// check with 'type'
@@ -381,7 +403,8 @@ CommandsRegistry.registerCommand('_executeCompletionItemProvider', async (access
 		};
 
 		const resolving: Promise<any>[] = [];
-		const completions = await provideSuggestionItems(completionProvider, ref.object.textEditorModel, Position.lift(position), undefined, { triggerCharacter, triggerKind: triggerCharacter ? languages.CompletionTriggerKind.TriggerCharacter : languages.CompletionTriggerKind.Invoke });
+		const actualPosition = ref.object.textEditorModel.validatePosition(position);
+		const completions = await provideSuggestionItems(completionProvider, ref.object.textEditorModel, actualPosition, undefined, { triggerCharacter: triggerCharacter ?? undefined, triggerKind: triggerCharacter ? languages.CompletionTriggerKind.TriggerCharacter : languages.CompletionTriggerKind.Invoke });
 		for (const item of completions.items) {
 			if (resolving.length < (maxItemsToResolve ?? 0)) {
 				resolving.push(item.resolve(CancellationToken.None));
