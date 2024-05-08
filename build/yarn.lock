@@ -2042,11 +2042,14 @@ nan@^2.18.0:
   version "2.19.0"
   resolved "https://registry.yarnpkg.com/nan/-/nan-2.19.0.tgz#bb58122ad55a6c5bc973303908d5b16cfdd5a8c0"
   integrity sha512-nO1xXxfh/RWNxfd/XPfbIfFk5vgLsAxUR9y5O0cHMJu/AW9U95JLXqthYHjEp+8gQ5p96K9jUp8nbVOxCdRbtw==
+<<<<<<< HEAD
+=======
 
 nan@^2.18.0:
   version "2.19.0"
   resolved "https://registry.yarnpkg.com/nan/-/nan-2.19.0.tgz#bb58122ad55a6c5bc973303908d5b16cfdd5a8c0"
   integrity sha512-nO1xXxfh/RWNxfd/XPfbIfFk5vgLsAxUR9y5O0cHMJu/AW9U95JLXqthYHjEp+8gQ5p96K9jUp8nbVOxCdRbtw==
+>>>>>>> electron-29.x.y
 
 napi-build-utils@^1.0.1:
   version "1.0.2"
@@ -2610,6 +2613,8 @@ tr46@~0.0.3:
   integrity sha1-gYT9NH2snNwYWZLzpmIuFLnZq2o=
 
 tree-sitter-typescript@^0.20.5:
+<<<<<<< HEAD
+=======
   version "0.20.5"
   resolved "https://registry.yarnpkg.com/tree-sitter-typescript/-/tree-sitter-typescript-0.20.5.tgz#29e30c052bcb06cb992ffd2d392e010b0e1768b3"
   integrity sha512-RzK/Pc6k4GiXvInIBlo8ZggekP6rODfW2P6KHFCTSUHENsw6ynh+iacFhfkJRa4MT8EIN2WHygFJ7076/+eHKg==
@@ -2618,6 +2623,7 @@ tree-sitter-typescript@^0.20.5:
     tree-sitter "^0.20.6"
 
 tree-sitter@^0.20.5:
+>>>>>>> electron-29.x.y
   version "0.20.5"
   resolved "https://registry.yarnpkg.com/tree-sitter-typescript/-/tree-sitter-typescript-0.20.5.tgz#29e30c052bcb06cb992ffd2d392e010b0e1768b3"
   integrity sha512-RzK/Pc6k4GiXvInIBlo8ZggekP6rODfW2P6KHFCTSUHENsw6ynh+iacFhfkJRa4MT8EIN2WHygFJ7076/+eHKg==
@@ -2631,6 +2637,8 @@ tree-sitter@^0.20.5, tree-sitter@^0.20.6:
   integrity sha512-GxJodajVpfgb3UREzzIbtA1hyRnTxVbWVXrbC6sk4xTMH5ERMBJk9HJNq4c8jOJeUaIOmLcwg+t6mez/PDvGqg==
   dependencies:
     nan "^2.18.0"
+<<<<<<< HEAD
+=======
     prebuild-install "^7.1.1"
 
 tree-sitter@^0.20.6:
@@ -2639,6 +2647,7 @@ tree-sitter@^0.20.6:
   integrity sha512-GxJodajVpfgb3UREzzIbtA1hyRnTxVbWVXrbC6sk4xTMH5ERMBJk9HJNq4c8jOJeUaIOmLcwg+t6mez/PDvGqg==
   dependencies:
     nan "^2.18.0"
+>>>>>>> electron-29.x.y
     prebuild-install "^7.1.1"
 
 tslib@^1.10.0:
