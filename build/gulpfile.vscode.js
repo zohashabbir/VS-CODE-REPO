@@ -138,7 +138,7 @@ const minifyVSCodeTask = task.define('minify-vscode', task.series(
 ));
 gulp.task(minifyVSCodeTask);
 
-const core = task.define('core-ci', task.series(
+const core = task.define('core', task.series(
 	gulp.task('compile-build'),
 	task.parallel(
 		gulp.task('minify-vscode'),
@@ -147,6 +147,16 @@ const core = task.define('core-ci', task.series(
 	)
 ));
 gulp.task(core);
+
+const coreCi = task.define('core-ci', task.series(
+	gulp.task('compile-build-pr'),
+	task.parallel(
+		gulp.task('optimize-vscode'),
+		gulp.task('optimize-vscode-reh'),
+		gulp.task('optimize-vscode-reh-web'),
+	)
+));
+gulp.task(coreCi);
 
 const corePr = task.define('core-ci-pr', task.series(
 	gulp.task('compile-build-pr'),
