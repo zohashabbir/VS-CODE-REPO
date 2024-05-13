@@ -69,8 +69,14 @@ export class ChatFollowups<T extends IChatFollowup | IInlineChatFollowup> extend
 		} else if (followup.kind === 'command') {
 			button.element.classList.add('interactive-followup-command');
 		}
-		button.element.ariaLabel = localize('followUpAriaLabel', "Follow up question: {0}", followup.title);
-		button.label = new MarkdownString(baseTitle);
+		button.element.ariaLabel = localize('followUpAriaLabel', "Follow up question: {0}", baseTitle);
+		let label = '';
+		if (followup.kind === 'reply') {
+			label = '$(sparkle) ' + baseTitle;
+		} else {
+			label = baseTitle;
+		}
+		button.label = new MarkdownString(label, { supportThemeIcons: true });
 
 		this._register(button.onDidClick(() => this.clickHandler(followup)));
 	}
