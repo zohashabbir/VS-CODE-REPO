@@ -6,10 +6,10 @@
 import { localize, localize2 } from 'vs/nls';
 import { KeyMod, KeyCode } from 'vs/base/common/keyCodes';
 import { Registry } from 'vs/platform/registry/common/platform';
-import { MenuRegistry, MenuId, registerAction2, Action2, ISubmenuItem, IMenuItem, IAction2Options } from 'vs/platform/actions/common/actions';
+import { MenuRegistry, MenuId, registerAction2, Action2, IMenuItem, IAction2Options } from 'vs/platform/actions/common/actions';
 import { InstantiationType, registerSingleton } from 'vs/platform/instantiation/common/extensions';
-import { ExtensionsLocalizedLabel, IExtensionManagementService, IExtensionGalleryService, PreferencesLocalizedLabel, InstallOperation } from 'vs/platform/extensionManagement/common/extensionManagement';
-import { EnablementState, IExtensionManagementServerService, IWorkbenchExtensionEnablementService, IWorkbenchExtensionManagementService } from 'vs/workbench/services/extensionManagement/common/extensionManagement';
+import { ExtensionsLocalizedLabel, IExtensionManagementService, IExtensionGalleryService, PreferencesLocalizedLabel, InstallOperation, EXTENSION_INSTALL_SOURCE_CONTEXT, ExtensionInstallSource } from 'vs/platform/extensionManagement/common/extensionManagement';
+import { EnablementState, IExtensionManagementServerService, IWorkbenchExtensionEnablementService, IWorkbenchExtensionManagementService, extensionsConfigurationNodeBase } from 'vs/workbench/services/extensionManagement/common/extensionManagement';
 import { IExtensionIgnoredRecommendationsService, IExtensionRecommendationsService } from 'vs/workbench/services/extensionRecommendations/common/extensionRecommendations';
 import { IWorkbenchContributionsRegistry, Extensions as WorkbenchExtensions, IWorkbenchContribution } from 'vs/workbench/common/contributions';
 import { SyncDescriptor } from 'vs/platform/instantiation/common/descriptors';
@@ -122,13 +122,9 @@ Registry.as<IViewContainersRegistry>(ViewContainerExtensions.ViewContainersRegis
 		alwaysUseContainerInfo: true,
 	}, ViewContainerLocation.Sidebar);
 
-
 Registry.as<IConfigurationRegistry>(ConfigurationExtensions.Configuration)
 	.registerConfiguration({
-		id: 'extensions',
-		order: 30,
-		title: localize('extensionsConfigurationTitle', "Extensions"),
-		type: 'object',
+		...extensionsConfigurationNodeBase,
 		properties: {
 			'extensions.autoUpdate': {
 				enum: [true, 'onlyEnabledExtensions', 'onlySelectedExtensions', false,],
@@ -256,6 +252,11 @@ Registry.as<IConfigurationRegistry>(ConfigurationExtensions.Configuration)
 				type: 'boolean',
 				description: localize('extensionsDeferredStartupFinishedActivation', "When enabled, extensions which declare the `onStartupFinished` activation event will be activated after a timeout."),
 				default: false
+			},
+			'extensions.experimental.issueQuickAccess': {
+				type: 'boolean',
+				description: localize('extensionsInQuickAccess', "When enabled, extensions can be searched for via Quick Access and report issues from there."),
+				default: true
 			}
 		}
 	});
@@ -357,20 +358,20 @@ CommandsRegistry.registerCommand({
 				const extension = extensionsWorkbenchService.local.find(e => areSameExtensions(e.identifier, { id, uuid: version }));
 				if (extension?.enablementState === EnablementState.DisabledByExtensionKind) {
 					const [gallery] = await extensionGalleryService.getExtensions([{ id, preRelease: options?.installPreReleaseVersion }], CancellationToken.None);
-					if (gallery) {
+					if (!gallery) {
 						throw new Error(localize('notFound', "Extension '{0}' not found.", arg));
 					}
 					await extensionManagementService.installFromGallery(gallery, {
 						isMachineScoped: options?.donotSync ? true : undefined, /* do not allow syncing extensions automatically while installing through the command */
 						installPreReleaseVersion: options?.installPreReleaseVersion,
 						installGivenVersion: !!version,
-						context: options?.context
+						context: { ...options?.context, [EXTENSION_INSTALL_SOURCE_CONTEXT]: ExtensionInstallSource.COMMAND },
 					});
 				} else {
 					await extensionsWorkbenchService.install(arg, {
 						version,
 						installPreReleaseVersion: options?.installPreReleaseVersion,
-						context: options?.context,
+						context: { ...options?.context, [EXTENSION_INSTALL_SOURCE_CONTEXT]: ExtensionInstallSource.COMMAND },
 						justification: options?.justification,
 						enable: options?.enable,
 						isMachineScoped: options?.donotSync ? true : undefined, /* do not allow syncing extensions automatically while installing through the command */
@@ -634,7 +635,7 @@ class ExtensionsContributions extends Disposable implements IWorkbenchContributi
 		});
 
 		const autoUpdateExtensionsSubMenu = new MenuId('autoUpdateExtensionsSubMenu');
-		MenuRegistry.appendMenuItem(MenuId.ViewContainerTitle, <ISubmenuItem>{
+		MenuRegistry.appendMenuItem(MenuId.ViewContainerTitle, {
 			submenu: autoUpdateExtensionsSubMenu,
 			title: localize('configure auto updating extensions', "Auto Update Extensions"),
 			when: ContextKeyExpr.and(ContextKeyExpr.equals('viewContainer', VIEWLET_ID), CONTEXT_HAS_GALLERY),
@@ -929,7 +930,7 @@ class ExtensionsContributions extends Disposable implements IWorkbenchContributi
 		});
 
 		const extensionsFilterSubMenu = new MenuId('extensionsFilterSubMenu');
-		MenuRegistry.appendMenuItem(extensionsSearchActionsMenu, <ISubmenuItem>{
+		MenuRegistry.appendMenuItem(extensionsSearchActionsMenu, {
 			submenu: extensionsFilterSubMenu,
 			title: localize('filterExtensions', "Filter Extensions..."),
 			group: 'navigation',
@@ -1015,7 +1016,7 @@ class ExtensionsContributions extends Disposable implements IWorkbenchContributi
 		});
 
 		const extensionsCategoryFilterSubMenu = new MenuId('extensionsCategoryFilterSubMenu');
-		MenuRegistry.appendMenuItem(extensionsFilterSubMenu, <ISubmenuItem>{
+		MenuRegistry.appendMenuItem(extensionsFilterSubMenu, {
 			submenu: extensionsCategoryFilterSubMenu,
 			title: localize('filter by category', "Category"),
 			when: CONTEXT_HAS_GALLERY,
@@ -1128,7 +1129,7 @@ class ExtensionsContributions extends Disposable implements IWorkbenchContributi
 		});
 
 		const extensionsSortSubMenu = new MenuId('extensionsSortSubMenu');
-		MenuRegistry.appendMenuItem(extensionsFilterSubMenu, <ISubmenuItem>{
+		MenuRegistry.appendMenuItem(extensionsFilterSubMenu, {
 			submenu: extensionsSortSubMenu,
 			title: localize('sorty by', "Sort By"),
 			when: ContextKeyExpr.and(ContextKeyExpr.or(CONTEXT_HAS_GALLERY, DefaultViewsContext)),
@@ -1530,7 +1531,7 @@ class ExtensionsContributions extends Disposable implements IWorkbenchContributi
 			menu: {
 				id: MenuId.ExtensionContext,
 				group: '2_configure',
-				when: ContextKeyExpr.and(ContextKeyExpr.equals('extensionStatus', 'installed'), ContextKeyExpr.has('isDefaultApplicationScopedExtension').negate(), ContextKeyExpr.has('isBuiltinExtension').negate()),
+				when: ContextKeyExpr.and(ContextKeyExpr.equals('extensionStatus', 'installed'), ContextKeyExpr.has('isDefaultApplicationScopedExtension').negate(), ContextKeyExpr.has('isBuiltinExtension').negate(), ContextKeyExpr.equals('isWorkspaceScopedExtension', false)),
 				order: 3
 			},
 			run: async (accessor: ServicesAccessor, id: string) => {
@@ -1547,7 +1548,7 @@ class ExtensionsContributions extends Disposable implements IWorkbenchContributi
 			menu: {
 				id: MenuId.ExtensionContext,
 				group: '2_configure',
-				when: ContextKeyExpr.and(CONTEXT_SYNC_ENABLEMENT),
+				when: ContextKeyExpr.and(CONTEXT_SYNC_ENABLEMENT, ContextKeyExpr.equals('isWorkspaceScopedExtension', false)),
 				order: 4
 			},
 			run: async (accessor: ServicesAccessor, id: string) => {
@@ -1588,7 +1589,7 @@ class ExtensionsContributions extends Disposable implements IWorkbenchContributi
 			menu: {
 				id: MenuId.ExtensionContext,
 				group: '3_recommendations',
-				when: ContextKeyExpr.and(WorkbenchStateContext.notEqualsTo('empty'), ContextKeyExpr.has('isBuiltinExtension').negate(), ContextKeyExpr.has('isExtensionWorkspaceRecommended').negate(), ContextKeyExpr.has('isUserIgnoredRecommendation').negate()),
+				when: ContextKeyExpr.and(WorkbenchStateContext.notEqualsTo('empty'), ContextKeyExpr.has('isBuiltinExtension').negate(), ContextKeyExpr.has('isExtensionWorkspaceRecommended').negate(), ContextKeyExpr.has('isUserIgnoredRecommendation').negate(), ContextKeyExpr.notEquals('extensionSource', 'resource')),
 				order: 2
 			},
 			run: (accessor: ServicesAccessor, id: string) => accessor.get(IWorkspaceExtensionsConfigService).toggleRecommendation(id)

@@ -50,7 +50,7 @@ import { INotebookEditorOptions } from 'vs/workbench/contrib/notebook/browser/no
 import { NotebookEditorWidget } from 'vs/workbench/contrib/notebook/browser/notebookEditorWidget';
 import * as icons from 'vs/workbench/contrib/notebook/browser/notebookIcons';
 import { INotebookEditorService } from 'vs/workbench/contrib/notebook/browser/services/notebookEditorService';
-import { CellEditType, CellKind, CellUri, INTERACTIVE_WINDOW_EDITOR_ID, NotebookWorkingCopyTypeIdentifier } from 'vs/workbench/contrib/notebook/common/notebookCommon';
+import { CellEditType, CellKind, CellUri, INTERACTIVE_WINDOW_EDITOR_ID, NotebookSetting, NotebookWorkingCopyTypeIdentifier } from 'vs/workbench/contrib/notebook/common/notebookCommon';
 import { InteractiveWindowOpen } from 'vs/workbench/contrib/notebook/common/notebookContextKeys';
 import { INotebookKernelService } from 'vs/workbench/contrib/notebook/common/notebookKernelService';
 import { INotebookService } from 'vs/workbench/contrib/notebook/common/notebookService';
@@ -253,7 +253,7 @@ class InteractiveWindowWorkingCopyEditorHandler extends Disposable implements IW
 	}
 }
 
-registerWorkbenchContribution2(InteractiveDocumentContribution.ID, InteractiveDocumentContribution, WorkbenchPhase.AfterRestored);
+registerWorkbenchContribution2(InteractiveDocumentContribution.ID, InteractiveDocumentContribution, WorkbenchPhase.BlockRestore);
 registerWorkbenchContribution2(InteractiveInputContentProvider.ID, InteractiveInputContentProvider, {
 	editorTypeId: INTERACTIVE_WINDOW_EDITOR_ID
 });
@@ -434,7 +434,21 @@ registerAction2(class extends Action2 {
 			id: 'interactive.execute',
 			title: localize2('interactive.execute', 'Execute Code'),
 			category: interactiveWindowCategory,
-			keybinding: {
+			keybinding: [{
+				when: ContextKeyExpr.and(
+					ContextKeyExpr.equals('activeEditor', 'workbench.editor.interactive'),
+					ContextKeyExpr.equals('config.interactiveWindow.executeWithShiftEnter', true)
+				),
+				primary: KeyMod.Shift | KeyCode.Enter,
+				weight: NOTEBOOK_EDITOR_WIDGET_ACTION_WEIGHT
+			}, {
+				when: ContextKeyExpr.and(
+					ContextKeyExpr.equals('activeEditor', 'workbench.editor.interactive'),
+					ContextKeyExpr.equals('config.interactiveWindow.executeWithShiftEnter', false)
+				),
+				primary: KeyCode.Enter,
+				weight: NOTEBOOK_EDITOR_WIDGET_ACTION_WEIGHT
+			}, {
 				// when: NOTEBOOK_CELL_LIST_FOCUSED,
 				when: ContextKeyExpr.equals('activeEditor', 'workbench.editor.interactive'),
 				primary: KeyMod.WinCtrl | KeyCode.Enter,
@@ -442,7 +456,7 @@ registerAction2(class extends Action2 {
 					primary: KeyMod.CtrlCmd | KeyCode.Enter
 				},
 				weight: NOTEBOOK_EDITOR_WIDGET_ACTION_WEIGHT
-			},
+			}],
 			menu: [
 				{
 					id: MenuId.InteractiveInputExecute
@@ -794,6 +808,16 @@ Registry.as<IConfigurationRegistry>(ConfigurationExtensions.Configuration).regis
 			type: 'boolean',
 			default: true,
 			markdownDescription: localize('interactiveWindow.alwaysScrollOnNewCell', "Automatically scroll the interactive window to show the output of the last statement executed. If this value is false, the window will only scroll if the last cell was already the one scrolled to.")
+		},
+		[NotebookSetting.InteractiveWindowPromptToSave]: {
+			type: 'boolean',
+			default: false,
+			markdownDescription: localize('interactiveWindow.promptToSaveOnClose', "Prompt to save the interactive window when it is closed. Only new interactive windows will be affected by this setting change.")
+		},
+		['interactiveWindow.executeWithShiftEnter']: {
+			type: 'boolean',
+			default: true,
+			markdownDescription: localize('interactiveWindow.executeWithShiftEnter', "Execute the interactive window (REPL) input box with shift+enter, so that enter can be used to create a newline.")
 		}
 	}
 });
