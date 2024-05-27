@@ -114,6 +114,7 @@ export class SectionHeaderDetector extends Disposable implements IEditorContribu
 
 		return {
 			foldingRules,
+			sectionHeaderDetectionRegExp: new RegExp(minimap.sectionHeaderDetectionRegExp, 'd'),
 			findMarkSectionHeaders: minimap.showMarkSectionHeaders,
 			findRegionSectionHeaders: minimap.showRegionSectionHeaders,
 		};

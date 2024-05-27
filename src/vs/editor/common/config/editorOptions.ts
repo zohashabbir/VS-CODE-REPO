@@ -3067,6 +3067,13 @@ export interface IEditorMinimapOptions {
 	 * Whether to show MARK: comments as section headers. Defaults to true.
 	 */
 	showMarkSectionHeaders?: boolean;
+
+	/**
+	 * When specified, is used to create a custom section header parser regexp.
+	 * It must contain a match group that detects the header
+	 */
+	sectionHeaderDetectionRegExp?: string;
+
 	/**
 	 * Font size of section headers. Defaults to 9.
 	 */
@@ -3092,6 +3099,7 @@ class EditorMinimap extends BaseEditorOption<EditorOption.minimap, IEditorMinima
 			scale: 1,
 			showRegionSectionHeaders: true,
 			showMarkSectionHeaders: true,
+			sectionHeaderDetectionRegExp: '\\bMARK:\\s*(?<separator>\-?)\\s*(?<label>.*)$',
 			sectionHeaderFontSize: 9,
 		};
 		super(
@@ -3158,11 +3166,16 @@ class EditorMinimap extends BaseEditorOption<EditorOption.minimap, IEditorMinima
 					default: defaults.showMarkSectionHeaders,
 					description: nls.localize('minimap.showMarkSectionHeaders', "Controls whether MARK: comments are shown as section headers in the minimap.")
 				},
+				'editor.minimap.sectionHeaderDetectionRegExp': {
+					type: 'string',
+					default: defaults.sectionHeaderDetectionRegExp,
+					description: nls.localize('minimap.sectionHeaderDetectionRegExp', "Defines the regular expression used to find section headers in comments. It must contain a named match group `label` (written as `(?<label>.+)`) that encapsulates the section header, otherwise it will not work. Optionally you can include another match group named `separator`, if this match group captures anything then the separation line will be rendered. And keep in mind that the expression takes the whole line so it is advised to use `$`, and don't include the language's comment sign (say `//` for TypeScript, `#` for Python) if you intend for it to work in all languages.")
+				},
 				'editor.minimap.sectionHeaderFontSize': {
 					type: 'number',
 					default: defaults.sectionHeaderFontSize,
 					description: nls.localize('minimap.sectionHeaderFontSize', "Controls the font size of section headers in the minimap.")
-				}
+				},
 			}
 		);
 	}
@@ -3172,6 +3185,19 @@ class EditorMinimap extends BaseEditorOption<EditorOption.minimap, IEditorMinima
 			return this.defaultValue;
 		}
 		const input = _input as IEditorMinimapOptions;
+
+		// validating the sectionHeaderDetectionRegExp's regexps
+		// we test if the children are string and can be compiled as
+		// regular expressions.
+		let sectionHeaderDetectionRegExp = this.defaultValue.sectionHeaderDetectionRegExp;
+		const inputRegExp = _input.sectionHeaderDetectionRegExp;
+		if (typeof inputRegExp == 'string') {
+			try {
+				new RegExp(inputRegExp as string);
+				sectionHeaderDetectionRegExp = inputRegExp as string;
+			} catch { }
+		}
+
 		return {
 			enabled: boolean(input.enabled, this.defaultValue.enabled),
 			autohide: boolean(input.autohide, this.defaultValue.autohide),
@@ -3183,6 +3209,7 @@ class EditorMinimap extends BaseEditorOption<EditorOption.minimap, IEditorMinima
 			maxColumn: EditorIntOption.clampedInt(input.maxColumn, this.defaultValue.maxColumn, 1, 10000),
 			showRegionSectionHeaders: boolean(input.showRegionSectionHeaders, this.defaultValue.showRegionSectionHeaders),
 			showMarkSectionHeaders: boolean(input.showMarkSectionHeaders, this.defaultValue.showMarkSectionHeaders),
+			sectionHeaderDetectionRegExp: sectionHeaderDetectionRegExp,
 			sectionHeaderFontSize: EditorFloatOption.clamp(input.sectionHeaderFontSize ?? this.defaultValue.sectionHeaderFontSize, 4, 32),
 		};
 	}
@@ -6102,6 +6129,7 @@ export const EditorOptions = {
 			],
 			description: nls.localize('wordBreak', "Controls the word break rules used for Chinese/Japanese/Korean (CJK) text.")
 		}
+
 	)),
 	wordSegmenterLocales: register(new WordSegmenterLocales()),
 	wordSeparators: register(new EditorStringOption(
