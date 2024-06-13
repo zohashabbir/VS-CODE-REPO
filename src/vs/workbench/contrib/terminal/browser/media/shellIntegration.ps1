@@ -50,14 +50,15 @@ if ($env:VSCODE_ENV_APPEND) {
 }
 
 function Global:__VSCode-Escape-Value([string]$value) {
-	# NOTE: In PowerShell v6.1+, this can be written `$value -replace '…', { … }` instead of `[regex]::Replace`.
 	# Replace any non-alphanumeric characters.
-	[regex]::Replace($value, "[$([char]0x1b)\\\n;]", { param($match)
-			# Encode the (ascii) matches as `\x<hex>`
-			-Join (
-				[System.Text.Encoding]::UTF8.GetBytes($match.Value) | ForEach-Object { '\x{0:x2}' -f $_ }
-			)
-		})
+	$escapedValue = [regex]::Replace($value, "[$([char]0x1b)\\\n;]", { param($match)
+		# Encode the (ascii) matches as `\x<hex>`
+		$bytes = [System.Text.Encoding]::UTF8.GetBytes($match.Value)
+		$hex = $bytes | ForEach-Object { '\x{0:x2}' -f $_ }
+		$escaped = $hex -join ''
+		$escaped
+	})
+	$escapedValue
 }
 
 function Global:Prompt() {
