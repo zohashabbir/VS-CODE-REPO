@@ -154,19 +154,23 @@ export class TerminalChatWidget extends Disposable {
 		const topPadding = terminalWrapperHeight - (this._instance.rows * cellHeight);
 		const cursorY = (this._instance.xterm?.raw.buffer.active.cursorY ?? 0) + 1;
 		const top = topPadding + cursorY * cellHeight;
-		this._container.style.top = `${top}px`;
 		const widgetHeight = this._inlineChatWidget.contentHeight;
 		if (!terminalWrapperHeight) {
 			return;
 		}
-		if (top > terminalWrapperHeight - widgetHeight && terminalWrapperHeight - widgetHeight > 0) {
+		console.log('wrapper height', terminalWrapperHeight);
+		console.log('widget height', widgetHeight);
+		console.log('top', top);
+		if (terminalWrapperHeight - widgetHeight < 0) {
+			this._dimension = new Dimension(this._dimension!.width, terminalWrapperHeight - 20);
+			this._inlineChatWidget.layout(this._dimension!);
+			this._setTerminalOffset(undefined);
+		} else if (top > terminalWrapperHeight - widgetHeight) {
+			this._container.style.top = `${top}px`;
 			this._setTerminalOffset(top - (terminalWrapperHeight - widgetHeight));
 		} else {
+			this._container.style.top = `${top}px`;
 			this._setTerminalOffset(undefined);
-		}
-		if (terminalWrapperHeight - widgetHeight < 0) {
-			this._dimension = new Dimension(this._dimension!.width, terminalWrapperHeight - top - 20);
-			this._inlineChatWidget.layout(this._dimension!);
 		}
 	}
 
@@ -189,6 +193,7 @@ export class TerminalChatWidget extends Disposable {
 		this._onDidHide.fire();
 	}
 	private _setTerminalOffset(offset: number | undefined) {
+		console.log(offset);
 		if (offset === undefined || this._container.classList.contains('hide')) {
 			this._terminalElement.style.position = '';
 			this._terminalElement.style.bottom = '';
