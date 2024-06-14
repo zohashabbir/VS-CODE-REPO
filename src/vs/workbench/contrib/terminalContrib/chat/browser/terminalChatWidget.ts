@@ -162,8 +162,11 @@ export class TerminalChatWidget extends Disposable {
 		console.log('widget height', widgetHeight);
 		console.log('top', top);
 		if (terminalWrapperHeight - widgetHeight < 0) {
+			console.log('setting widget height to', terminalWrapperHeight - 20);
 			this._dimension = new Dimension(this._dimension!.width, terminalWrapperHeight - 20);
 			this._inlineChatWidget.layout(this._dimension!);
+			this._container.style.height = `${terminalWrapperHeight - 20}px`;
+			console.log('height is ', this._inlineChatWidget.contentHeight);
 			this._setTerminalOffset(undefined);
 		} else if (top > terminalWrapperHeight - widgetHeight) {
 			this._container.style.top = `${top}px`;
