@@ -29,8 +29,9 @@ import { TypeScriptServerSpawner } from './tsServer/spawner';
 import { TypeScriptVersionManager } from './tsServer/versionManager';
 import { ITypeScriptVersionProvider, TypeScriptVersion } from './tsServer/versionProvider';
 import { ClientCapabilities, ClientCapability, ExecConfig, ITypeScriptServiceClient, ServerResponse, TypeScriptRequests } from './typescriptService';
-import { Disposable, DisposableStore, disposeAll } from './utils/dispose';
+import { Disposable, DisposableStore, disposeAll, IDisposable } from './utils/dispose';
 import { isWeb, isWebAndHasSharedArrayBuffers } from './utils/platform';
+import { PathTrie } from './utils/pathTrie';
 
 
 export interface TsDiagnostics {
@@ -101,6 +102,13 @@ interface WatchEvent {
 	updated?: Set<string>;
 	created?: Set<string>;
 	deleted?: Set<string>;
+}
+
+interface WorkspaceWatcherSubscription {
+	path: vscode.Uri;
+	recursive: boolean;
+	ignoreChangeEvents: boolean;
+	onDidChange: (path: string, type: 'updated' | 'created' | 'deleted') => void;
 }
 
 export default class TypeScriptServiceClient extends Disposable implements ITypeScriptServiceClient {
@@ -1013,10 +1021,8 @@ export default class TypeScriptServiceClient extends Disposable implements IType
 			case EventName.createDirectoryWatcher:
 				this.createFileSystemWatcher(
 					(event.body as Proto.CreateDirectoryWatcherEventBody).id,
-					new vscode.RelativePattern(
-						vscode.Uri.file((event.body as Proto.CreateDirectoryWatcherEventBody).path),
-						(event.body as Proto.CreateDirectoryWatcherEventBody).recursive ? '**' : '*'
-					),
+					vscode.Uri.file((event.body as Proto.CreateDirectoryWatcherEventBody).path),
+					(event.body as Proto.CreateDirectoryWatcherEventBody).recursive,
 					(event.body as Proto.CreateDirectoryWatcherEventBody).ignoreUpdate
 				);
 				break;
@@ -1024,10 +1030,8 @@ export default class TypeScriptServiceClient extends Disposable implements IType
 			case EventName.createFileWatcher:
 				this.createFileSystemWatcher(
 					(event.body as Proto.CreateFileWatcherEventBody).id,
-					new vscode.RelativePattern(
-						vscode.Uri.file((event.body as Proto.CreateFileWatcherEventBody).path),
-						'*'
-					)
+					vscode.Uri.file((event.body as Proto.CreateFileWatcherEventBody).path),
+					false
 				);
 				break;
 
@@ -1090,20 +1094,12 @@ export default class TypeScriptServiceClient extends Disposable implements IType
 
 	private createFileSystemWatcher(
 		id: number,
-		pattern: vscode.RelativePattern,
+		path: vscode.Uri,
+		recursive: boolean,
 		ignoreChangeEvents?: boolean,
 	) {
 		const disposable = new DisposableStore();
-		const watcher = disposable.add(vscode.workspace.createFileSystemWatcher(pattern, { excludes: [] /* TODO:: need to fill in excludes list */, ignoreChangeEvents }));
-		disposable.add(watcher.onDidChange(changeFile =>
-			this.addWatchEvent(id, 'updated', changeFile.fsPath)
-		));
-		disposable.add(watcher.onDidCreate(createFile =>
-			this.addWatchEvent(id, 'created', createFile.fsPath)
-		));
-		disposable.add(watcher.onDidDelete(deletedFile =>
-			this.addWatchEvent(id, 'deleted', deletedFile.fsPath)
-		));
+		disposable.add(this.doCreateFileSystemWatcher(path, recursive, !!ignoreChangeEvents, (path, kind) => this.addWatchEvent(id, kind, path)));
 		disposable.add({
 			dispose: () => {
 				this.watchEvents.delete(id);
@@ -1115,6 +1111,98 @@ export default class TypeScriptServiceClient extends Disposable implements IType
 			this.closeFileSystemWatcher(id);
 		}
 		this.watches.set(id, disposable);
+	}
+
+	private readonly workspaceWatchers = new Map<string, vscode.FileSystemWatcher>(); // TODO dispose when last user disposes
+	private readonly recursiveWorkspaceWatchSubscriptions = new PathTrie<Array<WorkspaceWatcherSubscription>>();
+	private readonly nonRecursiveWorkspaceWatchSubscriptions = new Map<string, Array<WorkspaceWatcherSubscription>>();
+
+	private doCreateFileSystemWatcher(path: vscode.Uri, recursive: boolean, ignoreChangeEvents: boolean, onDidChange: (path: string, type: 'updated' | 'created' | 'deleted') => void): IDisposable {
+		const disposable = new DisposableStore();
+
+		const folder = vscode.workspace.getWorkspaceFolder(path);
+
+		// No workspace folder found: create a file watcher through API
+		if (!folder) {
+			const watcher = disposable.add(vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(path, recursive ? '**' : '*'), { excludes: [] }));
+			disposable.add(watcher.onDidChange(changedFile => onDidChange(changedFile.fsPath, 'updated')));
+			disposable.add(watcher.onDidCreate(createdFile => onDidChange(createdFile.fsPath, 'created')));
+			disposable.add(watcher.onDidDelete(deletedFile => onDidChange(deletedFile.fsPath, 'deleted')));
+
+			return disposable;
+		}
+
+		// Workspace folder found: install a full workspace watcher
+		// and subscribe to that to reduce number of overall watchers
+
+		const workspaceWatchSubscription = { path, recursive, ignoreChangeEvents, onDidChange };
+
+		const target = recursive ? this.recursiveWorkspaceWatchSubscriptions : this.nonRecursiveWorkspaceWatchSubscriptions;
+		let subscriptions = target.get(path.fsPath);
+		if (!subscriptions) {
+			subscriptions = [];
+			target.set(path.fsPath, subscriptions);
+		}
+
+		subscriptions.push(workspaceWatchSubscription);
+		disposable.add({
+			dispose: () => {
+				const index = subscriptions.indexOf(workspaceWatchSubscription);
+				if (index !== -1) {
+					subscriptions.splice(index, 1);
+					if (subscriptions.length === 0) {
+						target.delete(path.fsPath);
+					}
+				}
+			}
+		});
+
+		if (!this.workspaceWatchers.has(folder.uri.fsPath)) {
+			const workspaceWatcher = vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(folder.uri, '**'), { excludes: [] });
+			this.workspaceWatchers.set(folder.uri.fsPath, workspaceWatcher);
+
+			workspaceWatcher.onDidChange(changedFile => {
+				for (const watcher of this.findWorkspaceWatchSubscriptions(changedFile.fsPath)) {
+					if (watcher.ignoreChangeEvents) {
+						continue;
+					}
+
+					watcher.onDidChange(changedFile.fsPath, 'updated');
+				}
+			});
+
+			workspaceWatcher.onDidCreate(createdFile => {
+				for (const watcher of this.findWorkspaceWatchSubscriptions(createdFile.fsPath)) {
+					watcher.onDidChange(createdFile.fsPath, 'created');
+				}
+			});
+
+			workspaceWatcher.onDidDelete(deletedFile => {
+				for (const watcher of this.findWorkspaceWatchSubscriptions(deletedFile.fsPath)) {
+					watcher.onDidChange(deletedFile.fsPath, 'deleted');
+				}
+			});
+		}
+
+		return disposable;
+	}
+
+	private * findWorkspaceWatchSubscriptions(path: string) {
+		const recursiveWatchers = this.recursiveWorkspaceWatchSubscriptions.findSuperstr(path);
+		if (recursiveWatchers) {
+			for (const watchers of recursiveWatchers) {
+				for (const watcher of watchers) {
+					yield watcher;
+				}
+			}
+		}
+
+		const nonRecursiveWatchers = this.nonRecursiveWorkspaceWatchSubscriptions.get(path);
+		if (nonRecursiveWatchers) {
+			for (const watcher of nonRecursiveWatchers) {
+				yield watcher;
+			}
+		}
 	}
 
 	private closeFileSystemWatcher(
