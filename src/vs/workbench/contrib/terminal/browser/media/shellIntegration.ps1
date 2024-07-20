@@ -218,12 +218,27 @@ function Send-Completions {
 			if ($completions.CompletionMatches.Count -gt 0 -and $completions.CompletionMatches.Where({ $_.ResultType -eq 3 -or $_.ResultType -eq 4 })) {
 				$json = [System.Collections.ArrayList]@($completions.CompletionMatches)
 				# Add . and .. to the completions list
+				$cwd = Get-Location
 				$json.Add([System.Management.Automation.CompletionResult]::new(
-					'.', '.', [System.Management.Automation.CompletionResultType]::ProviderContainer, (Get-Location).Path)
+					'.', '.', [System.Management.Automation.CompletionResultType]::ProviderContainer, $cwd.Path)
 				)
+				$parent = Split-Path $cwd -Parent
 				$json.Add([System.Management.Automation.CompletionResult]::new(
-					'..', '..', [System.Management.Automation.CompletionResultType]::ProviderContainer, (Split-Path (Get-Location) -Parent))
+					'..', '..', [System.Management.Automation.CompletionResultType]::ProviderContainer, $parent)
 				)
+
+
+				# Add .. of the current suggested path
+				$parentOfSuggestedCompletionText = Split-Path $completions.CompletionMatches[0].CompletionText -Parent
+				$parentOfSuggested = Get-Item $parentOfSuggestedCompletionText
+
+				if ($parentOfSuggested.Equals($parent) -ne $true) {
+					# Write-Host $parentOfSuggested
+					$json.Add([System.Management.Automation.CompletionResult]::new(
+						"a", "a", [System.Management.Automation.CompletionResultType]::ProviderContainer, ""
+						# $parentOfSuggestedCompletionText, $parentOfSuggestedCompletionText, [System.Management.Automation.CompletionResultType]::ProviderContainer, ""
+					))
+				}
 				$mappedCommands = Compress-Completions($json)
 				$result += $mappedCommands | ConvertTo-Json -Compress
 			} else {
