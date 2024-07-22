@@ -316,7 +316,8 @@ export abstract class AbstractTaskService extends Disposable implements ITaskSer
 		this._registerCommands().then(() => TaskCommandsRegistered.bindTo(this._contextKeyService).set(true));
 		ServerlessWebContext.bindTo(this._contextKeyService).set(Platform.isWeb && !remoteAgentService.getConnection()?.remoteAuthority);
 		this._configurationResolverService.contributeVariable('defaultBuildTask', async (): Promise<string | undefined> => {
-			let tasks = await this._getTasksForGroup(TaskGroup.Build);
+			// Try to resolve the default task for the build group to prevent all extensions from activating
+			let tasks = await this._getTasksForGroup(TaskGroup.Build, true);
 			if (tasks.length > 0) {
 				const defaults = this._getDefaultTasks(tasks);
 				if (defaults.length === 1) {
@@ -324,6 +325,9 @@ export abstract class AbstractTaskService extends Disposable implements ITaskSer
 				} else if (defaults.length) {
 					tasks = defaults;
 				}
+			} else {
+				// If no task is configured with isDefault, activate all extensions and try again
+				tasks = await this._getTasksForGroup(TaskGroup.Build);
 			}
 
 			let entry: ITaskQuickPickEntry | null | undefined;
@@ -608,6 +612,7 @@ export abstract class AbstractTaskService extends Disposable implements ITaskSer
 		// We need to first wait for extensions to be registered because we might read
 		// the `TaskDefinitionRegistry` in case `type` is `undefined`
 		await this._extensionService.whenInstalledExtensionsRegistered();
+		this._log('activating ' + type ?? 'all');
 		await raceTimeout(
 			Promise.all(this._getActivationEvents(type).map(activationEvent => this._extensionService.activateByEvent(activationEvent))),
 			5000,
@@ -1418,12 +1423,15 @@ export abstract class AbstractTaskService extends Disposable implements ITaskSer
 		return task;
 	}
 
-	private async _getTasksForGroup(group: TaskGroup): Promise<Task[]> {
-		const groups = await this._getGroupedTasks();
+	private async _getTasksForGroup(group: TaskGroup, isDefault?: boolean): Promise<Task[]> {
+		const groups = await this._getGroupedTasks(undefined, isDefault);
 		const result: Task[] = [];
 		groups.forEach(tasks => {
 			for (const task of tasks) {
 				const configTaskGroup = TaskGroup.from(task.configurationProperties.group);
+				if (isDefault && !configTaskGroup?.isDefault) {
+					continue;
+				}
 				if (configTaskGroup?._id === group._id) {
 					result.push(task);
 				}
@@ -2001,11 +2009,14 @@ export abstract class AbstractTaskService extends Disposable implements ITaskSer
 		return !definition || !definition.when || this._contextKeyService.contextMatchesRules(definition.when);
 	}
 
-	private async _getGroupedTasks(filter?: ITaskFilter): Promise<TaskMap> {
+	private async _getGroupedTasks(filter?: ITaskFilter, isDefault?: boolean): Promise<TaskMap> {
 		await this._waitForAllSupportedExecutions;
 		const type = filter?.type;
 		const needsRecentTasksMigration = this._needsRecentTasksMigration();
-		await this._activateTaskProviders(filter?.type);
+		if (!isDefault) {
+			// If a default task is found, it's provider#when will be activated when it gets run. Otherwise, we will activate for all.
+			await this._activateTaskProviders(filter?.type);
+		}
 		const validTypes: IStringDictionary<boolean> = Object.create(null);
 		TaskDefinitionRegistry.all().forEach(definition => validTypes[definition.taskType] = true);
 		validTypes['shell'] = true;
