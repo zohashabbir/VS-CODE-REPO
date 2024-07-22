@@ -2014,7 +2014,7 @@ export abstract class AbstractTaskService extends Disposable implements ITaskSer
 		const type = filter?.type;
 		const needsRecentTasksMigration = this._needsRecentTasksMigration();
 		if (!isDefault) {
-			// If a default task is found, it's provider#when will be activated when it gets run. Otherwise, we will activate for all.
+			// If a default task is found, it's provider will be activated when it gets run. Otherwise, we will activate for all.
 			await this._activateTaskProviders(filter?.type);
 		}
 		const validTypes: IStringDictionary<boolean> = Object.create(null);
