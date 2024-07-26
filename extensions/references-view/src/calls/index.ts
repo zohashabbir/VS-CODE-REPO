@@ -47,16 +47,16 @@ export function register(tree: SymbolsTree, context: vscode.ExtensionContext): v
 	);
 }
 
-async function copyCall(item: CallItem | unknown, type: "hierarchy" | "name", reverse: boolean = false, short: boolean = false) {
+async function copyCall(item: CallItem | unknown, type: 'hierarchy' | 'name', reverse: boolean = false, short: boolean = false) {
 	let val = '';
 	if (item instanceof CallItem) {
-		if (type == 'hierarchy') {
+		if (type === 'hierarchy') {
 			const space = 2;
 			const prefix = '> ';
 			let hierarchy: Array<String> = new Array();
 			let anchor: CallItem | undefined = item;
 			let level = 0;
-			while (anchor != undefined) {
+			while (anchor !== undefined) {
 				let itemString = anchor.item.name;
 				if (!short) {
 					itemString += ` (${vscode.SymbolKind[anchor.item.kind]} @ ${vscode.workspace.asRelativePath(anchor.item.uri)})`;
@@ -68,12 +68,12 @@ async function copyCall(item: CallItem | unknown, type: "hierarchy" | "name", re
 				hierarchy = hierarchy.reverse();
 			}
 			while (hierarchy.length !== 0) {
-				val += `${' '.repeat(space * level)}${(level !== 0) ? prefix : ''}${hierarchy.pop()}\n`
+				val += `${' '.repeat(space * level)}${(level !== 0) ? prefix : ''}${hierarchy.pop()}\n`;
 				level++;
 			}
 			val = val.trim();
 		}
-		else if (type == 'name') {
+		else if (type === 'name') {
 			val = item.item.name;
 		}
 	}
