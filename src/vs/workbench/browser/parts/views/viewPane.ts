@@ -695,7 +695,9 @@ export abstract class ViewPane extends Pane implements IView {
 				}
 			};
 		}
-		return createActionViewItem(this.instantiationService, action, { ...options, ...{ menuAsChild: action instanceof SubmenuItemAction } });
+		const viewItem = createActionViewItem(this.instantiationService, action, { ...options, ...{ menuAsChild: action instanceof SubmenuItemAction } });
+		viewItem?.setFocusable(true);
+		return viewItem;
 	}
 
 	getActionsContext(): unknown {

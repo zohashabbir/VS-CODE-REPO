@@ -110,7 +110,15 @@ export class FilterWidget extends Widget {
 		const controlsContainer = DOM.append(this.element, DOM.$('.viewpane-filter-controls'));
 		this.filterBadge = this.createBadge(controlsContainer);
 		this.toolbar = this._register(this.createToolBar(controlsContainer));
-
+		if (!this.toolbar.isEmpty()) {
+			this._register(DOM.addDisposableListener(this.toolbar.getElement(), 'keydown', (e) => {
+				// When the toolbar (a child of the filter) is focused, it has no sibling with a tab index, so we need to handle tab and
+				// focus the next action item in the toolbar to prevent focus from getting stuck there #223957
+				if (e.key === 'Tab' && !e.shiftKey) {
+					this._focusNextActionItem(this.toolbar.getElement(), true);
+				}
+			}));
+		}
 		this.adjustInputBox();
 	}
 
@@ -175,8 +183,8 @@ export class FilterWidget extends Widget {
 		if (this.options.text) {
 			inputBox.value = this.options.text;
 		}
-		this._register(inputBox.onDidChange(filter => this.delayedFilterUpdate.trigger(() => this.onDidInputChange(inputBox))));
-		this._register(DOM.addStandardDisposableListener(inputBox.inputElement, DOM.EventType.KEY_DOWN, (e: any) => this.onInputKeyDown(e, inputBox)));
+		this._register(inputBox.onDidChange(() => this.delayedFilterUpdate.trigger(() => this.onDidInputChange(inputBox))));
+		this._register(DOM.addStandardDisposableListener(inputBox.inputElement, DOM.EventType.KEY_DOWN, (e: any) => this.onInputKeyDown(e)));
 		this._register(DOM.addStandardDisposableListener(container, DOM.EventType.KEY_DOWN, this.handleKeyboardEvent));
 		this._register(DOM.addStandardDisposableListener(container, DOM.EventType.KEY_UP, this.handleKeyboardEvent));
 		this._register(DOM.addStandardDisposableListener(inputBox.inputElement, DOM.EventType.CLICK, (e) => {
@@ -237,7 +245,7 @@ export class FilterWidget extends Widget {
 		}
 	}
 
-	private onInputKeyDown(event: StandardKeyboardEvent, filterInputBox: HistoryInputBox) {
+	private onInputKeyDown(event: StandardKeyboardEvent) {
 		let handled = false;
 		if (event.equals(KeyCode.Tab) && !this.toolbar.isEmpty()) {
 			this.toolbar.focus();
@@ -247,6 +255,22 @@ export class FilterWidget extends Widget {
 			event.stopPropagation();
 			event.preventDefault();
 		}
+
+		if (event.equals(KeyCode.Tab) && !event.shiftKey) {
+			// If the toolbar is empty and tab is pressed, focus the next action item in the
+			// toolbar to prevent focus from getting stuck there as tab is otherwise
+			// consumed by the editor #223957
+			this._focusNextActionItem(this.element);
+		}
 	}
 
+	private _focusNextActionItem(element: HTMLElement, toolbar?: boolean) {
+		const nextActionItem = toolbar ? element.parentElement?.parentElement?.parentElement?.nextElementSibling?.firstChild : element.parentElement?.nextElementSibling?.firstChild;
+		if (!nextActionItem || !DOM.isHTMLElement(nextActionItem) || nextActionItem.tabIndex !== 0) {
+			return;
+		}
+		console.log(nextActionItem.tabIndex);
+		console.log('focusing ', nextActionItem.id);
+		nextActionItem.focus();
+	}
 }
