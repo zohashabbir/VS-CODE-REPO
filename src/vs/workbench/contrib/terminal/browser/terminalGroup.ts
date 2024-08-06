@@ -136,7 +136,7 @@ class SplitPaneContainer extends Disposable {
 		}
 		this._terminalToPane.set(instance, this._children[this._children.indexOf(child)]);
 
-		this._withDisabledLayout(() => this._splitView.addView(child, Sizing.Distribute, index));
+		this._withDisabledLayout(() => this._splitView.addView(child, Sizing.Auto(index), index));
 		this.layout(this._width, this._height);
 
 		this._onDidChange = Event.any(...this._children.map(c => c.onDidChange));
