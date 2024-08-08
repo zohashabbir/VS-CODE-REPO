@@ -130,21 +130,12 @@ steps:
       AnalyzeTargetGlob: '$(Agent.BuildDirectory)\scanbin\**.dll;$(Agent.BuildDirectory)\scanbin\**.exe;$(Agent.BuildDirectory)\scanbin\**.node'
       AnalyzeLocalSymbolDirectories: '$(Agent.BuildDirectory)\scanbin\VSCode-win32-${{ parameters.VSCODE_ARCH }}\pdb'
 
-  - task: CopyFiles@2
-    displayName: 'Collect Symbols for API Scan'
-    inputs:
-      SourceFolder: $(Agent.BuildDirectory)
-      Contents: 'scanbin\**\*.pdb'
-      TargetFolder: '$(Agent.BuildDirectory)\symbols'
-      flattenFolders: true
-    condition: succeeded()
-
   - task: APIScan@2
     inputs:
       softwareFolder: $(Agent.BuildDirectory)\scanbin
       softwareName: 'vscode-client'
       softwareVersionNum: '1'
-      symbolsFolder: 'srv*https://symweb.azurefd.net;$(Agent.BuildDirectory)\symbols'
+      symbolsFolder: 'srv*https://symweb.azurefd.net;$(Agent.BuildDirectory)\scanbin'
       isLargeApp: false
       toolVersion: 'Latest'
       azureSubscription: 'vscode-apiscan'
