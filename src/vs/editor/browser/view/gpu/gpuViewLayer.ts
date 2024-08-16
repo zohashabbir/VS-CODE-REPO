@@ -44,8 +44,10 @@ const enum BindingId {
 	// TODO: Improve names
 	GlyphInfo0,
 	GlyphInfo1,
+	ScratchGlyphInfo,
 	DynamicUnitInfo,
 	TextureSampler,
+	ScratchTexture,
 	Texture,
 	Uniforms,
 	AtlasInfoUniform,
@@ -72,9 +74,14 @@ export class GpuViewLayerRenderer<T extends IVisibleLine> {
 	private _squareVertices!: { vertexData: Float32Array; numVertices: number };
 
 	private static _atlas: TextureAtlas;
-	private readonly _glyphStorageBuffer: GPUBuffer[] = [];
+
+	private readonly _atlasGlyphStorageBuffer: GPUBuffer[] = [];
 	private _atlasGpuTexture!: GPUTexture;
 	private readonly _atlasGpuTextureVersions: number[] = [];
+
+	private _atlasScratchGlyphStorageBuffer!: GPUBuffer;
+	private _atlasScratchGpuTexture!: GPUTexture;
+	private _atlasScratchGpuTextureVersion = 0;
 
 	private _initialized = false;
 
@@ -209,13 +216,13 @@ export class GpuViewLayerRenderer<T extends IVisibleLine> {
 		///////////////////
 		// Static buffer //
 		///////////////////
-		this._glyphStorageBuffer[0] = this._device.createBuffer({
+		this._atlasGlyphStorageBuffer[0] = this._device.createBuffer({
 			label: 'Monaco glyph storage buffer',
 			size: spriteInfoStorageBufferByteSize * Constants.MaxAtlasPageGlyphCount,
 			usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
 		});
-		this._glyphStorageBuffer[1] = this._device.createBuffer({
-			label: 'Monaco glyph storage buffer',
+		this._atlasGlyphStorageBuffer[1] = this._device.createBuffer({
+			label: 'Monaco atlas glyph storage buffer',
 			size: spriteInfoStorageBufferByteSize * Constants.MaxAtlasPageGlyphCount,
 			usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
 		});
@@ -226,6 +233,21 @@ export class GpuViewLayerRenderer<T extends IVisibleLine> {
 			format: 'rgba8unorm',
 			// TODO: Dynamically grow/shrink layer count
 			size: { width: atlas.pageSize, height: atlas.pageSize, depthOrArrayLayers: 2 },
+			dimension: '2d',
+			usage: GPUTextureUsage.TEXTURE_BINDING |
+				GPUTextureUsage.COPY_DST |
+				GPUTextureUsage.RENDER_ATTACHMENT,
+		});
+
+		this._atlasScratchGlyphStorageBuffer = this._device.createBuffer({
+			label: 'Monaco atlas scratch glyph storage buffer',
+			size: spriteInfoStorageBufferByteSize * Constants.MaxAtlasPageGlyphCount,
+			usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+		});
+		this._atlasScratchGpuTexture = this._device.createTexture({
+			label: 'Monaco atlas scratch texture',
+			format: 'rgba8unorm',
+			size: { width: atlas.scratchPage.source.width, height: atlas.scratchPage.source.height },
 			dimension: '2d',
 			usage: GPUTextureUsage.TEXTURE_BINDING |
 				GPUTextureUsage.COPY_DST |
@@ -253,10 +275,12 @@ export class GpuViewLayerRenderer<T extends IVisibleLine> {
 			layout: this._pipeline.getBindGroupLayout(0),
 			entries: [
 				// TODO: Pass in generically as array?
-				{ binding: BindingId.GlyphInfo0, resource: { buffer: this._glyphStorageBuffer[0] } },
-				{ binding: BindingId.GlyphInfo1, resource: { buffer: this._glyphStorageBuffer[1] } },
+				{ binding: BindingId.GlyphInfo0, resource: { buffer: this._atlasGlyphStorageBuffer[0] } },
+				{ binding: BindingId.GlyphInfo1, resource: { buffer: this._atlasGlyphStorageBuffer[1] } },
+				{ binding: BindingId.ScratchGlyphInfo, resource: { buffer: this._atlasScratchGlyphStorageBuffer } },
 				{ binding: BindingId.TextureSampler, resource: sampler },
 				{ binding: BindingId.Texture, resource: this._atlasGpuTexture.createView() },
+				{ binding: BindingId.ScratchTexture, resource: this._atlasScratchGpuTexture.createView() },
 				{ binding: BindingId.Uniforms, resource: { buffer: uniformBuffer } },
 				{ binding: BindingId.AtlasInfoUniform, resource: { buffer: atlasInfoUniformBuffer } },
 				...this._renderStrategy.bindGroupEntries
@@ -306,6 +330,33 @@ export class GpuViewLayerRenderer<T extends IVisibleLine> {
 	private _updateAtlas() {
 		const atlas = GpuViewLayerRenderer._atlas;
 
+		// TODO: DRY
+		{
+			const page = atlas.scratchPage;
+			if (page.version !== this._atlasScratchGpuTextureVersion) {
+				// TODO: Dynamically set buffer size
+				const bufferSize = spriteInfoStorageBufferByteSize * Constants.MaxAtlasPageGlyphCount;
+				const values = new Float32Array(bufferSize / 4);
+				let entryOffset = 0;
+				for (const glyph of atlas.scratchPage.glyphs) {
+					values[entryOffset + SpriteInfoStorageBufferInfo.Offset_TexturePosition] = glyph.x;
+					values[entryOffset + SpriteInfoStorageBufferInfo.Offset_TexturePosition + 1] = glyph.y;
+					values[entryOffset + SpriteInfoStorageBufferInfo.Offset_TextureSize] = glyph.w;
+					values[entryOffset + SpriteInfoStorageBufferInfo.Offset_TextureSize + 1] = glyph.h;
+					values[entryOffset + SpriteInfoStorageBufferInfo.Offset_OriginPosition] = glyph.originOffsetX;
+					values[entryOffset + SpriteInfoStorageBufferInfo.Offset_OriginPosition + 1] = glyph.originOffsetY;
+					entryOffset += SpriteInfoStorageBufferInfo.Size;
+				}
+				this._device.queue.writeBuffer(this._atlasGlyphStorageBuffer[0], 0, values);
+				// TODO: Draw only dirty regions
+				this._device.queue.copyExternalImageToTexture(
+					{ source: atlas.scratchPage.source },
+					{ texture: this._atlasScratchGpuTexture },
+					{ width: atlas.scratchPage.source.width, height: atlas.scratchPage.source.height },
+				);
+				this._atlasScratchGpuTextureVersion = atlas.scratchPage.version;
+			}
+		}
 		for (const [layerIndex, page] of atlas.pages.entries()) {
 			// Skip the update if it's already the latest version
 			if (page.version === this._atlasGpuTextureVersions[layerIndex]) {
@@ -325,7 +376,7 @@ export class GpuViewLayerRenderer<T extends IVisibleLine> {
 				values[entryOffset + SpriteInfoStorageBufferInfo.Offset_OriginPosition + 1] = glyph.originOffsetY;
 				entryOffset += SpriteInfoStorageBufferInfo.Size;
 			}
-			this._device.queue.writeBuffer(this._glyphStorageBuffer[layerIndex], 0, values);
+			this._device.queue.writeBuffer(this._atlasGlyphStorageBuffer[layerIndex], 0, values);
 			// TODO: Draw only dirty regions
 			this._device.queue.copyExternalImageToTexture(
 				{ source: page.source },
@@ -416,7 +467,7 @@ interface IRenderStrategy<T extends IVisibleLine> {
 
 // #region Full file render strategy
 
-const fullFileRenderStrategyWgsl = `
+const fullFileRenderStrategyWgsl = /* wgsl */`
 struct Uniforms {
 	canvasDimensions: vec2f,
 };
@@ -457,6 +508,7 @@ struct VSOutput {
 
 @group(0) @binding(${BindingId.GlyphInfo0}) var<storage, read> glyphInfo0: array<GlyphInfo>;
 @group(0) @binding(${BindingId.GlyphInfo1}) var<storage, read> glyphInfo1: array<GlyphInfo>;
+@group(0) @binding(${BindingId.ScratchGlyphInfo}) var<storage, read> scratchGlyphInfo: array<GlyphInfo>;
 @group(0) @binding(${BindingId.DynamicUnitInfo}) var<storage, read> dynamicUnitInfoStructs: array<DynamicUnitInfo>;
 @group(0) @binding(${BindingId.ScrollOffset}) var<uniform> scrollOffset: ScrollOffset;
 
@@ -468,8 +520,10 @@ struct VSOutput {
 	let dynamicUnitInfo = dynamicUnitInfoStructs[instanceIndex];
 	// TODO: Is there a nicer way to init this?
 	var glyph = glyphInfo0[0];
-	let glyphIndex = u32(dynamicUnitInfo.glyphIndex);
-	if (u32(dynamicUnitInfo.textureIndex) == 0) {
+	let glyphIndex = i32(dynamicUnitInfo.glyphIndex);
+	if (i32(dynamicUnitInfo.textureIndex) == -1) {
+		glyph = scratchGlyphInfo[glyphIndex];
+	} else if (i32(dynamicUnitInfo.textureIndex) == 0) {
 		glyph = glyphInfo0[glyphIndex];
 	} else {
 		glyph = glyphInfo1[glyphIndex];
@@ -497,9 +551,13 @@ struct VSOutput {
 }
 
 @group(0) @binding(${BindingId.TextureSampler}) var ourSampler: sampler;
+@group(0) @binding(${BindingId.ScratchTexture}) var scratchTexture: texture_2d<f32>;
 @group(0) @binding(${BindingId.Texture}) var ourTexture: texture_2d_array<f32>;
 
 @fragment fn fs(vsOut: VSOutput) -> @location(0) vec4f {
+	if (i32(vsOut.layerIndex) == -1) {
+		return textureSample(scratchTexture, ourSampler, vsOut.texcoord);
+	}
 	return textureSample(ourTexture, ourSampler, vsOut.texcoord, u32(vsOut.layerIndex));
 }
 `;

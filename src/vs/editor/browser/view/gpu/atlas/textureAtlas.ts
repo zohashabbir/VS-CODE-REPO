@@ -14,22 +14,10 @@ import { IInstantiationService } from 'vs/platform/instantiation/common/instanti
 import { IThemeService } from 'vs/platform/theme/common/themeService';
 
 export class TextureAtlas extends Disposable {
-	// TODO: Expose all page glyphs - the glyphs will need a textureId association
-	public get scratchGlyphs(): IterableIterator<ITextureAtlasGlyph> {
-		return this._scratchPage.glyphs;
-	}
-	// public get glyphs(): IterableIterator<ITextureAtlasGlyph> {
-	// 	return this._pages.glyphs;
-	// }
-
 	private readonly _glyphRasterizer: GlyphRasterizer;
 
 	private _colorMap!: string[];
 	private readonly _warmUpTask: MutableDisposable<IdleTaskQueue> = this._register(new MutableDisposable());
-
-	// get source(): OffscreenCanvas {
-	// 	return this._pages.source;
-	// }
 
 	/**
 	 * The scratch texture atlas page is a relatively small texture where glyphs that are required
@@ -37,9 +25,8 @@ export class TextureAtlas extends Disposable {
 	 * callback, the glyph will be transferred into one of the main pages.
 	 */
 	private readonly _scratchPage: TextureAtlasPage;
-	// TODO: Generically get pages externally - gpu shouldn't care about the details of the pages
-	get scratchSource(): OffscreenCanvas {
-		return this._scratchPage.source;
+	get scratchPage(): IReadableTextureAtlasPage {
+		return this._scratchPage;
 	}
 
 	/**
@@ -83,7 +70,7 @@ export class TextureAtlas extends Disposable {
 		const scratchPageSize = Math.min(1024 * dprFactor, this._maxTextureSize);
 		// TODO: General way of assigning texture identifier
 		// TODO: Identify texture via a name, the texture index should be only known to the GPU code
-		this._scratchPage = this._register(this._instantiationService.createInstance(TextureAtlasPage, 0, scratchPageSize, 'shelf', this._glyphRasterizer));
+		this._scratchPage = this._register(this._instantiationService.createInstance(TextureAtlasPage, -1, scratchPageSize, 'shelf', this._glyphRasterizer));
 
 		this.pageSize = Math.min(1024 * dprFactor, this._maxTextureSize);
 		this._pages.push(this._instantiationService.createInstance(TextureAtlasPage, 0, this.pageSize, 'slab', this._glyphRasterizer));
