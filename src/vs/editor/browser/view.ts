@@ -9,7 +9,7 @@ import { IMouseWheelEvent } from 'vs/base/browser/mouseEvent';
 import { inputLatency } from 'vs/base/browser/performance';
 import { CodeWindow } from 'vs/base/browser/window';
 import { BugIndicatingError, onUnexpectedError } from 'vs/base/common/errors';
-import { IDisposable } from 'vs/base/common/lifecycle';
+import { IDisposable, toDisposable } from 'vs/base/common/lifecycle';
 import { IPointerHandlerHelper } from 'vs/editor/browser/controller/mouseHandler';
 import { PointerHandlerLastRenderData } from 'vs/editor/browser/controller/mouseTarget';
 import { PointerHandler } from 'vs/editor/browser/controller/pointerHandler';
@@ -37,7 +37,7 @@ import { Minimap } from 'vs/editor/browser/viewParts/minimap/minimap';
 import { ViewOverlayWidgets } from 'vs/editor/browser/viewParts/overlayWidgets/overlayWidgets';
 import { DecorationsOverviewRuler } from 'vs/editor/browser/viewParts/overviewRuler/decorationsOverviewRuler';
 import { OverviewRuler } from 'vs/editor/browser/viewParts/overviewRuler/overviewRuler';
-import { Rulers } from 'vs/editor/browser/viewParts/rulers/rulers';
+import { GpuRulers } from 'vs/editor/browser/viewParts/rulers/gpu/gpuRulers';
 import { ScrollDecorationViewPart } from 'vs/editor/browser/viewParts/scrollDecoration/scrollDecoration';
 import { SelectionsOverlay } from 'vs/editor/browser/viewParts/selections/selections';
 import { ViewCursors } from 'vs/editor/browser/viewParts/viewCursors/viewCursors';
@@ -118,8 +118,13 @@ export class View extends ViewEventHandler {
 
 		const viewController = new ViewController(configuration, model, userInputEvents, commandDelegate);
 
+		const gpuCanvas = document.createElement('canvas');
+		gpuCanvas.style.height = '100%';
+		gpuCanvas.style.width = '100%';
+		this._register(toDisposable(() => gpuCanvas.remove()));
+
 		// The view context is passed on to most classes (basically to reduce param. counts in ctors)
-		this._context = new ViewContext(configuration, colorTheme, model);
+		this._context = new ViewContext(configuration, colorTheme, model, gpuCanvas);
 
 		// Ensure the view is the first event handler in order to update the layout
 		this._context.addEventHandler(this);
@@ -146,7 +151,6 @@ export class View extends ViewEventHandler {
 
 		this._scrollbar = new EditorScrollbar(this._context, this._linesContent, this.domNode, this._overflowGuardContainer);
 		this._viewParts.push(this._scrollbar);
-
 		// View Lines
 		this._viewLines = this._instantiationService.createInstance(ViewLines, this._context, this._linesContent);
 
@@ -198,7 +202,8 @@ export class View extends ViewEventHandler {
 		this._overlayWidgets = new ViewOverlayWidgets(this._context, this.domNode);
 		this._viewParts.push(this._overlayWidgets);
 
-		const rulers = new Rulers(this._context);
+		// const rulers = new Rulers(this._context);
+		const rulers = new GpuRulers(this._context);
 		this._viewParts.push(rulers);
 
 		const blockOutline = new BlockDecorations(this._context);
@@ -215,7 +220,7 @@ export class View extends ViewEventHandler {
 		}
 
 		this._linesContent.appendChild(contentViewOverlays.getDomNode());
-		this._linesContent.appendChild(rulers.domNode);
+		// this._linesContent.appendChild(rulers.domNode);
 		this._linesContent.appendChild(this._viewZones.domNode);
 		this._linesContent.appendChild(this._viewLines.getDomNode());
 		this._linesContent.appendChild(this._contentWidgets.domNode);
@@ -473,6 +478,7 @@ export class View extends ViewEventHandler {
 	private _createCoordinatedRendering() {
 		return {
 			prepareRenderText: () => {
+				this._context.gpuEncoder = this._context.gpuDevice_.createCommandEncoder({ label: 'Monaco viewPart/rulers command encoder' });
 				if (this._shouldRecomputeGlyphMarginLanes) {
 					this._shouldRecomputeGlyphMarginLanes = false;
 					const model = this._computeGlyphMarginLanes();
@@ -524,6 +530,10 @@ export class View extends ViewEventHandler {
 					viewPart.render(ctx);
 					viewPart.onDidRender();
 				}
+
+				const commandBuffer = this._context.gpuEncoder!.finish();
+
+				this._context.gpuDevice_.queue.submit([commandBuffer]);
 			}
 		};
 	}

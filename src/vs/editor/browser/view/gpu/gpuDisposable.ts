@@ -11,7 +11,7 @@ export interface IDisposableGPUObject<T> extends IDisposable {
 }
 
 export namespace GPULifecycle {
-	export async function requestDevice(): Promise<IDisposableGPUObject<GPUDevice>> {
+	export async function requestDevice(descriptor: GPUDeviceDescriptor): Promise<IDisposableGPUObject<GPUDevice>> {
 		if (!navigator.gpu) {
 			throw new Error('This browser does not support WebGPU');
 		}
@@ -19,7 +19,7 @@ export namespace GPULifecycle {
 		if (!adapter) {
 			throw new Error('This browser supports WebGPU but it appears to be disabled');
 		}
-		return wrapDestroyableInDisposable(await adapter.requestDevice());
+		return wrapDestroyableInDisposable(await adapter.requestDevice(descriptor));
 	}
 
 	export function createBuffer(device: GPUDevice, descriptor: GPUBufferDescriptor, initialValues?: Float32Array | (() => Float32Array)): IDisposableGPUObject<GPUBuffer> {

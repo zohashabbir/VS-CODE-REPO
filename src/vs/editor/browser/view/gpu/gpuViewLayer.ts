@@ -19,7 +19,7 @@ import type { ViewContext } from 'vs/editor/common/viewModel/viewContext';
 import { IInstantiationService } from 'vs/platform/instantiation/common/instantiation';
 import { ILogService } from 'vs/platform/log/common/log';
 
-export const disableNonGpuRendering = true;
+export const disableNonGpuRendering = false;
 
 interface IRendererContext<T extends IVisibleLine> {
 	rendLineNumberStart: number;
@@ -61,12 +61,12 @@ export class GpuViewLayerRenderer<T extends IVisibleLine> extends Disposable {
 	private readonly _gpuCtx!: GPUCanvasContext;
 
 	private _device!: GPUDevice;
+	private _pipeline!: GPURenderPipeline;
+	private _bindGroup!: GPUBindGroup;
 	private _renderPassDescriptor!: GPURenderPassDescriptor;
 	private _renderPassColorAttachment!: GPURenderPassColorAttachment;
-	private _bindGroup!: GPUBindGroup;
-	private _pipeline!: GPURenderPipeline;
 
-	private _vertexBuffer!: GPUBuffer;
+	private _quadBuffer!: GPUBuffer;
 	private _quadVertices!: { vertexData: Float32Array; numVertices: number };
 
 	static atlas: TextureAtlas;
@@ -80,7 +80,6 @@ export class GpuViewLayerRenderer<T extends IVisibleLine> extends Disposable {
 	private _renderStrategy!: IRenderStrategy<T>;
 
 	constructor(
-		domNode: HTMLCanvasElement,
 		private readonly _context: ViewContext,
 		host: IVisibleLinesHost<T>,
 		viewportData: ViewportData,
@@ -89,7 +88,7 @@ export class GpuViewLayerRenderer<T extends IVisibleLine> extends Disposable {
 	) {
 		super();
 
-		this.domNode = domNode;
+		this.domNode = this._context.gpuCanvas;
 		this.host = host;
 		this.viewportData = viewportData;
 
@@ -104,7 +103,7 @@ export class GpuViewLayerRenderer<T extends IVisibleLine> extends Disposable {
 	}
 
 	async initWebgpu() {
-		this._device = this._register(await GPULifecycle.requestDevice()).value;
+		this._device = await this._context.gpuDevice;
 
 		const presentationFormat = navigator.gpu.getPreferredCanvasFormat();
 		this._gpuCtx.configure({
@@ -183,9 +182,9 @@ export class GpuViewLayerRenderer<T extends IVisibleLine> extends Disposable {
 			uniformBufferValues[UniformBufferInfo.Offset_CanvasHeight] = this.domNode.height;
 			return uniformBufferValues;
 		})).value;
-		this._register(observeDevicePixelDimensions(this.domNode, getActiveWindow(), (w, h) => {
-			uniformBufferValues[UniformBufferInfo.Offset_CanvasWidth] = this.domNode.width;
-			uniformBufferValues[UniformBufferInfo.Offset_CanvasHeight] = this.domNode.height;
+		this._register(observeDevicePixelDimensions(this.domNode, getActiveWindow(), (width, height) => {
+			uniformBufferValues[UniformBufferInfo.Offset_CanvasWidth] = width;
+			uniformBufferValues[UniformBufferInfo.Offset_CanvasHeight] = height;
 			this._device.queue.writeBuffer(uniformBuffer, 0, uniformBufferValues);
 		}));
 
@@ -255,7 +254,7 @@ export class GpuViewLayerRenderer<T extends IVisibleLine> extends Disposable {
 			]),
 			numVertices: 6
 		};
-		this._vertexBuffer = this._register(GPULifecycle.createBuffer(this._device, {
+		this._quadBuffer = this._register(GPULifecycle.createBuffer(this._device, {
 			label: 'Monaco quad vertex buffer',
 			size: this._quadVertices.vertexData.byteLength,
 			usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
@@ -359,16 +358,17 @@ export class GpuViewLayerRenderer<T extends IVisibleLine> extends Disposable {
 	}
 
 	private _render(ctx: IRendererContext<T>, startLineNumber: number, stopLineNumber: number, deltaTop: number[]): IRendererContext<T> {
+		console.log('render gpuviewlayer');
 		const visibleObjectCount = this._renderStrategy.update(ctx, startLineNumber, stopLineNumber, deltaTop);
 
 		this._updateAtlas();
 
-		const encoder = this._device.createCommandEncoder({ label: 'Monaco command encoder' });
+		const encoder = this._context.gpuEncoder!;// = this._device.createCommandEncoder({ label: 'Monaco viewPart/rulers command encoder' });
 
 		this._renderPassColorAttachment.view = this._gpuCtx.getCurrentTexture().createView({ label: 'Monaco canvas texture view' });
 		const pass = encoder.beginRenderPass(this._renderPassDescriptor);
 		pass.setPipeline(this._pipeline);
-		pass.setVertexBuffer(0, this._vertexBuffer);
+		pass.setVertexBuffer(0, this._quadBuffer);
 
 		pass.setBindGroup(0, this._bindGroup);
 		// TODO: Draws could be split by chunk, this would help minimize moving data around in arrays
@@ -380,10 +380,6 @@ export class GpuViewLayerRenderer<T extends IVisibleLine> extends Disposable {
 		}
 
 		pass.end();
-
-		const commandBuffer = encoder.finish();
-
-		this._device.queue.submit([commandBuffer]);
 
 		return ctx;
 	}

@@ -8,6 +8,7 @@ import { ViewEventHandler } from 'vs/editor/common/viewEventHandler';
 import { IViewLayout, IViewModel } from 'vs/editor/common/viewModel';
 import { IColorTheme } from 'vs/platform/theme/common/themeService';
 import { EditorTheme } from 'vs/editor/common/editorTheme';
+import { GPULifecycle } from 'vs/editor/browser/view/gpu/gpuDisposable';
 
 export class ViewContext {
 
@@ -15,16 +16,26 @@ export class ViewContext {
 	public readonly viewModel: IViewModel;
 	public readonly viewLayout: IViewLayout;
 	public readonly theme: EditorTheme;
+	public readonly gpuCanvas: HTMLCanvasElement;
+	public readonly gpuCtx: GPUCanvasContext;
+	public readonly gpuDevice: Promise<GPUDevice>;
+	public gpuDevice_!: GPUDevice;
+	public gpuEncoder?: GPUCommandEncoder;
 
 	constructor(
 		configuration: IEditorConfiguration,
 		theme: IColorTheme,
-		model: IViewModel
+		model: IViewModel,
+		gpuCanvas: HTMLCanvasElement
 	) {
 		this.configuration = configuration;
 		this.theme = new EditorTheme(theme);
 		this.viewModel = model;
 		this.viewLayout = model.viewLayout;
+		this.gpuCanvas = gpuCanvas;
+		this.gpuCtx = gpuCanvas.getContext('webgpu')!;
+		// TODO: Lifecycle
+		this.gpuDevice = GPULifecycle.requestDevice({ label: 'Monaco device' }).then(d => this.gpuDevice_ = d.value);
 	}
 
 	public addEventHandler(eventHandler: ViewEventHandler): void {

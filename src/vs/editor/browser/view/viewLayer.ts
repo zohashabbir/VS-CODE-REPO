@@ -259,8 +259,6 @@ export class VisibleLinesCollection<T extends IVisibleLine> extends Disposable {
 	public readonly domNode: FastDomNode<HTMLElement>;
 	private readonly _linesCollection: RenderedLinesCollection<T>;
 
-	private readonly _canvas: HTMLCanvasElement;
-
 	constructor(
 		private readonly _context: ViewContext,
 		host: IVisibleLinesHost<T>,
@@ -270,10 +268,6 @@ export class VisibleLinesCollection<T extends IVisibleLine> extends Disposable {
 
 		this._host = host;
 		this.domNode = this._createDomNode();
-
-		this._canvas = document.createElement('canvas');
-		this._canvas.style.height = '100%';
-		this._canvas.style.width = '100%';
 
 		this._linesCollection = new RenderedLinesCollection<T>(() => this._host.createVisibleLine());
 	}
@@ -368,12 +362,12 @@ export class VisibleLinesCollection<T extends IVisibleLine> extends Disposable {
 			renderer = new ViewLayerRenderer<T>(this.domNode.domNode, this._host, viewportData);
 		} else {
 			// If not yet attached, listen for device pixel size and attach
-			if (!this._canvas.parentElement) {
-				this.domNode.domNode.appendChild(this._canvas);
+			if (!this._context.gpuCanvas.parentElement) {
+				this.domNode.domNode.appendChild(this._context.gpuCanvas);
 			}
 
 			if (!this._gpuRenderer) {
-				this._gpuRenderer = this._register(this._instantiationService.createInstance(GpuViewLayerRenderer<T>, this._canvas, this._context, this._host, viewportData));
+				this._gpuRenderer = this._register(this._instantiationService.createInstance(GpuViewLayerRenderer<T>, this._context, this._host, viewportData));
 			}
 			renderer = this._gpuRenderer;
 			renderer.update(viewportData);
