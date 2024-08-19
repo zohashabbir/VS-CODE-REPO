@@ -3,10 +3,12 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { getActiveWindow } from 'vs/base/browser/dom';
 import { Disposable } from 'vs/base/common/lifecycle';
 import { ensureNonNullable } from 'vs/editor/browser/view/gpu/gpuUtils';
+import type { IBoundingBox, IRasterizedGlyph } from 'vs/editor/browser/view/gpu/raster/raster';
 import { StringBuilder } from 'vs/editor/common/core/stringBuilder';
-import { FontStyle, TokenMetadata } from 'vs/editor/common/encodedTokenAttributes';
+import { FontStyle, MetadataConsts, TokenMetadata } from 'vs/editor/common/encodedTokenAttributes';
 
 const $rasterizedGlyph: IRasterizedGlyph = {
 	source: null!,
@@ -60,11 +62,26 @@ export class GlyphRasterizer extends Disposable {
 		metadata: number,
 		colorMap: string[],
 	): Readonly<IRasterizedGlyph> {
+		metadata |= MetadataConsts.UNDERLINE_MASK;
+		const fontStyle = TokenMetadata.getFontStyle(metadata);
+
 		// TODO: Support workbench.fontAliasing
-		this._ctx.clearRect(0, 0, this._canvas.width, this._canvas.height);
+		const bgColor = colorMap[TokenMetadata.getBackground(metadata)];
+		const fgColor = colorMap[TokenMetadata.getForeground(metadata)];
+
+		this._ctx.fillStyle = bgColor;
+		if (bgColor) {
+			this._ctx.fillRect(0, 0, this._canvas.width, this._canvas.height);
+		} else {
+			this._ctx.clearRect(0, 0, this._canvas.width, this._canvas.height);
+		}
+
+		if (fontStyle & FontStyle.Underline) {
+			this._ctx.fillStyle = fgColor;
+			this._rasterizeUnderline();
+		}
 
 		const fontSb = new StringBuilder(200);
-		const fontStyle = TokenMetadata.getFontStyle(metadata);
 		if (fontStyle & FontStyle.Italic) {
 			fontSb.appendString('italic ');
 		}
@@ -81,12 +98,56 @@ export class GlyphRasterizer extends Disposable {
 		// TODO: Draw in middle using alphabetical baseline
 		const originX = this._fontSize;
 		const originY = this._fontSize;
-		this._ctx.fillStyle = colorMap[TokenMetadata.getForeground(metadata)];
+
+
+		if (fontStyle & FontStyle.Underline && this._fontSize >= 12 && bgColor) {
+			this._ctx.save();
+			this._ctx.lineWidth = getActiveWindow().devicePixelRatio * 3;
+			this._ctx.strokeStyle = bgColor;
+			this._ctx.strokeText(chars, originX, originY);
+			this._ctx.restore();
+		}
+
+
+
+
+
+		this._ctx.fillStyle = fgColor;
 		// TODO: This might actually be slower
 		// const textMetrics = this._ctx.measureText(chars);
 		this._ctx.fillText(chars, originX, originY);
 
+
 		const imageData = this._ctx.getImageData(0, 0, this._canvas.width, this._canvas.height);
+		function clearColor(imageData: ImageData, r: number, g: number, b: number, a: number) {
+			console.log('clear', r, g, b, a);
+			for (let i = 0; i < imageData.data.length; i += 4) {
+				if (
+					imageData.data[i + 0] === r &&
+					imageData.data[i + 1] === g &&
+					imageData.data[i + 2] === b &&
+					imageData.data[i + 3] === a
+				) {
+					imageData.data[i + 0] = 0;
+					imageData.data[i + 1] = 0;
+					imageData.data[i + 2] = 0;
+					imageData.data[i + 3] = 0;
+				}
+			}
+		}
+		if (bgColor) {
+			const matchGroups = bgColor.match(/(?<r>[0-9a-f]{2})(?<g>[0-9a-f]{2})(?<b>[0-9a-f]{2})(?<a>[0-9a-f]{2})?/i)?.groups;
+			if (matchGroups) {
+				clearColor(imageData,
+					parseInt(matchGroups.r, 16),
+					parseInt(matchGroups.g, 16),
+					parseInt(matchGroups.b, 16),
+					matchGroups.a === undefined ? 0xFF : parseInt(matchGroups.a, 16)
+				);
+			}
+		}
+
+		this._ctx.putImageData(imageData, 0, 0);
 		this._findGlyphBoundingBox(imageData, $rasterizedGlyph.boundingBox);
 		// const offset = {
 		// 	x: textMetrics.actualBoundingBoxLeft,
@@ -139,6 +200,10 @@ export class GlyphRasterizer extends Disposable {
 		// }
 
 		return $rasterizedGlyph;
+	}
+
+	private _rasterizeUnderline(): void {
+		this._ctx.fillRect(this._fontSize, this._fontSize * 2 - 2, this._fontSize, 1);
 	}
 
 	// TODO: Does this even need to happen when measure text is used?
@@ -207,20 +272,4 @@ export class GlyphRasterizer extends Disposable {
 			}
 		}
 	}
-}
-
-export interface IBoundingBox {
-	left: number;
-	top: number;
-	right: number;
-	bottom: number;
-}
-
-export interface IRasterizedGlyph {
-	source: OffscreenCanvas;
-	/**
-	 * The bounding box of the glyph within {@link source}.
-	 */
-	boundingBox: IBoundingBox;
-	originOffset: { x: number; y: number };
 }
