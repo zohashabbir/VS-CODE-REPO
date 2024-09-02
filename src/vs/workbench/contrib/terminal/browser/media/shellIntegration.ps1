@@ -170,11 +170,9 @@ function Set-MappedKeyHandler {
 	}
 }
 
-function Get-KeywordCompletionResult(
-	$Keyword,
-	$Description = $null
-) {
-	[System.Management.Automation.CompletionResult]::new($Keyword, $Keyword, [System.Management.Automation.CompletionResultType]::Keyword, $null -ne $Description ? $Description : $Keyword)
+function Get-KeywordCompletionResult {
+	param ($Keyword, $Description = $Keyword)
+	[System.Management.Automation.CompletionResult]::new($Keyword, $Keyword, [System.Management.Automation.CompletionResultType]::Keyword, $Description)
 }
 
 function Set-MappedKeyHandlers {
@@ -360,7 +358,7 @@ function Send-Completions {
 		# completions are consistent regardless of where it was requested
 		elseif ($lastWord -match '[/\\]') {
 			$lastSlashIndex = $completionPrefix.LastIndexOfAny(@('/', '\'))
-			if ($lastSlashIndex -ne -1 && $lastSlashIndex -lt $cursorIndex) {
+			if ($lastSlashIndex -ne -1 -and $lastSlashIndex -lt $cursorIndex) {
 				$newCursorIndex = $lastSlashIndex + 1
 				$completionPrefix = $completionPrefix.Substring(0, $newCursorIndex)
 				$prefixCursorDelta = $cursorIndex - $newCursorIndex
@@ -369,17 +367,29 @@ function Send-Completions {
 		}
 
 		# Get completions using TabExpansion2
-		$completions = TabExpansion2 -inputScript $completionPrefix -cursorColumn $cursorIndex
-		if ($null -ne $completions.CompletionMatches) {
+		$completions = $null
+		try
+		{
+			$completions = TabExpansion2 -inputScript $completionPrefix -cursorColumn $cursorIndex
+		}
+		catch
+		{
+			# TabExpansion2 may throw when there are no completions, in this case return an empty
+			# list to prevent falling back to file path completions
+		}
+		if ($null -eq $completions -or $null -eq $completions.CompletionMatches) {
+			$result += ";0;$($completionPrefix.Length);$($completionPrefix.Length);[]"
+		} else {
 			$result += ";$($completions.ReplacementIndex);$($completions.ReplacementLength + $prefixCursorDelta);$($cursorIndex - $prefixCursorDelta);"
 			$json = [System.Collections.ArrayList]@($completions.CompletionMatches)
 			# Relative directory completions
 			if ($completions.CompletionMatches.Count -gt 0 -and $completions.CompletionMatches.Where({ $_.ResultType -eq 3 -or $_.ResultType -eq 4 })) {
 				# Add `../ relative to the top completion
 				$firstCompletion = $completions.CompletionMatches[0]
-				if ($firstCompletion.CompletionText.StartsWith('../')) {
-					if ($completionPrefix -match '(\.\.\/)+') {
-						$parentDir = "$($matches[0])../"
+				if ($firstCompletion.CompletionText -match "^\.\.[\/\\]") {
+					if ($completionPrefix -match "(\.\.[\/\\])+") {
+						$normalizedPrefix = $matches[0] -replace '[\\/]', [System.IO.Path]::DirectorySeparatorChar
+						$parentDir = "$($normalizedPrefix)..$([System.IO.Path]::DirectorySeparatorChar)"
 						$currentPath = Split-Path -Parent $firstCompletion.ToolTip
 						try {
 							$parentDirPath = Split-Path -Parent $currentPath
@@ -419,7 +429,7 @@ function Send-Completions {
 		# completions are consistent regardless of where it was requested
 		if ($completionPrefix -match '[/\\]') {
 			$lastSlashIndex = $completionPrefix.LastIndexOfAny(@('/', '\'))
-			if ($lastSlashIndex -ne -1 && $lastSlashIndex -lt $cursorIndex) {
+			if ($lastSlashIndex -ne -1 -and $lastSlashIndex -lt $cursorIndex) {
 				$newCursorIndex = $lastSlashIndex + 1
 				$completionPrefix = $completionPrefix.Substring(0, $newCursorIndex)
 				$prefixCursorDelta = $cursorIndex - $newCursorIndex
