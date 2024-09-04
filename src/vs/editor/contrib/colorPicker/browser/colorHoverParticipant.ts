@@ -7,7 +7,7 @@ import { AsyncIterableObject } from '../../../../base/common/async.js';
 import { CancellationToken } from '../../../../base/common/cancellation.js';
 import { Color, RGBA } from '../../../../base/common/color.js';
 import { DisposableStore, IDisposable } from '../../../../base/common/lifecycle.js';
-import { IActiveCodeEditor, ICodeEditor } from '../../../browser/editorBrowser.js';
+import { IActiveCodeEditor, ICodeEditor, IEditorMouseEvent } from '../../../browser/editorBrowser.js';
 import { EditorOption } from '../../../common/config/editorOptions.js';
 import { Range } from '../../../common/core/range.js';
 import { IModelDecoration, ITextModel, TrackedRangeStickiness } from '../../../common/model.js';
@@ -22,6 +22,7 @@ import { ISingleEditOperation } from '../../../common/core/editOperation.js';
 import { LanguageFeatureRegistry } from '../../../common/languageFeatureRegistry.js';
 import { Dimension } from '../../../../base/browser/dom.js';
 import * as nls from '../../../../nls.js';
+import { ColorContribution } from './colorContributions.js';
 
 export class ColorHover implements IHoverPart {
 
@@ -113,6 +114,11 @@ export class ColorHoverParticipant implements IEditorHoverParticipant<ColorHover
 
 	public isColorPickerVisible(): boolean {
 		return !!this._colorPicker;
+	}
+
+	public shouldHideHoverOnMouseEvent(mouseEvent: IEditorMouseEvent): boolean {
+		const colorContribution = this._editor.getContribution<ColorContribution>(ColorContribution.ID);
+		return colorContribution?.shouldHideHoverOnMouseEvent(mouseEvent) ?? false;
 	}
 }
 
