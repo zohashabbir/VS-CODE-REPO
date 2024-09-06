@@ -3076,17 +3076,22 @@ export class FunctionBreakpoint extends Breakpoint {
 @es5ClassCompat
 export class DataBreakpoint extends Breakpoint {
 	readonly label: string;
-	readonly dataId: string;
+	readonly source: vscode.DataBreakpointSource;
 	readonly canPersist: boolean;
+	readonly accessType: vscode.DataBreakpointAccessType;
 
-	constructor(label: string, dataId: string, canPersist: boolean, enabled?: boolean, condition?: string, hitCondition?: string, logMessage?: string, mode?: string) {
+	constructor(source: vscode.DataBreakpointSource | string, accessType: vscode.DataBreakpointAccessType, canPersist?: boolean, label?: string, enabled?: boolean, condition?: string, hitCondition?: string, logMessage?: string, mode?: string) {
 		super(enabled, condition, hitCondition, logMessage, mode);
-		if (!dataId) {
-			throw illegalArgument('dataId');
-		}
-		this.label = label;
-		this.dataId = dataId;
-		this.canPersist = canPersist;
+		this.source = typeof source === 'string' ? { type: 'variable', dataId: source } : source;
+		this.accessType = accessType;
+		this.canPersist = canPersist ?? false;
+		this.label = label ? label
+			: this.source.type === 'variable' ? `DataId '${this.source.dataId}'`
+				: this.source.type === 'address' ? `Address '${this.source.address}${this.source.bytes ? `,${this.source.bytes}'` : ''}`
+					: this.source.type === 'expression' ? `Expression '${this.source.expression}'`
+						: this.source.frameId ? `Scoped '${this.source.expression}@${this.source.frameId}'`
+							: this.source.variablesReference ? `Scoped '${this.source.variable}@${this.source.variablesReference}'`
+								: `Unknown data breakpoint`;
 	}
 }
 

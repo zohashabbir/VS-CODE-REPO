@@ -12,7 +12,7 @@ import { ExtensionIdentifier, IExtensionDescription } from '../../../platform/ex
 import { createDecorator } from '../../../platform/instantiation/common/instantiation.js';
 import { ISignService } from '../../../platform/sign/common/sign.js';
 import { IWorkspaceFolder } from '../../../platform/workspace/common/workspace.js';
-import { DebugSessionUUID, ExtHostDebugServiceShape, IBreakpointsDeltaDto, IThreadFocusDto, IStackFrameFocusDto, IDebugSessionDto, IFunctionBreakpointDto, ISourceMultiBreakpointDto, MainContext, MainThreadDebugServiceShape } from './extHost.protocol.js';
+import { DebugSessionUUID, ExtHostDebugServiceShape, IBreakpointsDeltaDto, IThreadFocusDto, IStackFrameFocusDto, IDebugSessionDto, IFunctionBreakpointDto, ISourceMultiBreakpointDto, MainContext, MainThreadDebugServiceShape, IDataBreakpointDto } from './extHost.protocol.js';
 import { IExtHostEditorTabs } from './extHostEditorTabs.js';
 import { IExtHostExtensionService } from './extHostExtensionService.js';
 import { IExtHostRpcService } from './extHostRpcService.js';
@@ -31,6 +31,7 @@ import { IExtHostCommands } from './extHostCommands.js';
 import * as Convert from './extHostTypeConverters.js';
 import { coalesce } from '../../../base/common/arrays.js';
 import { IExtHostTesting } from './extHostTesting.js';
+import { Mutable } from '../../../base/common/types.js';
 
 export const IExtHostDebugService = createDecorator<IExtHostDebugService>('IExtHostDebugService');
 
@@ -411,7 +412,7 @@ export abstract class ExtHostDebugServiceBase extends DisposableCls implements I
 		this.fireBreakpointChanges(breakpoints, [], []);
 
 		// convert added breakpoints to DTOs
-		const dtos: Array<ISourceMultiBreakpointDto | IFunctionBreakpointDto> = [];
+		const dtos: Array<ISourceMultiBreakpointDto | IFunctionBreakpointDto | IDataBreakpointDto> = [];
 		const map = new Map<string, ISourceMultiBreakpointDto>();
 		for (const bp of breakpoints) {
 			if (bp instanceof SourceBreakpoint) {
@@ -445,6 +446,20 @@ export abstract class ExtHostDebugServiceBase extends DisposableCls implements I
 					condition: bp.condition,
 					functionName: bp.functionName,
 					mode: bp.mode,
+				});
+			} else if (bp instanceof DataBreakpoint) {
+				dtos.push({
+					type: 'data',
+					id: bp.id,
+					enabled: bp.enabled,
+					hitCondition: bp.hitCondition,
+					logMessage: bp.logMessage,
+					condition: bp.condition,
+					source: bp.source,
+					mode: bp.mode,
+					canPersist: bp.canPersist,
+					accessType: bp.accessType,
+					label: bp.label
 				});
 			}
 		}
@@ -728,7 +743,7 @@ export abstract class ExtHostDebugServiceBase extends DisposableCls implements I
 					if (bpd.type === 'function') {
 						bp = new FunctionBreakpoint(bpd.functionName, bpd.enabled, bpd.condition, bpd.hitCondition, bpd.logMessage, bpd.mode);
 					} else if (bpd.type === 'data') {
-						bp = new DataBreakpoint(bpd.label, bpd.dataId, bpd.canPersist, bpd.enabled, bpd.hitCondition, bpd.condition, bpd.logMessage, bpd.mode);
+						bp = new DataBreakpoint(bpd.source, bpd.accessType, bpd.canPersist, bpd.label, bpd.enabled, bpd.hitCondition, bpd.condition, bpd.logMessage, bpd.mode);
 					} else {
 						const uri = URI.revive(bpd.uri);
 						bp = new SourceBreakpoint(new Location(uri, new Position(bpd.line, bpd.character)), bpd.enabled, bpd.condition, bpd.hitCondition, bpd.logMessage, bpd.mode);
@@ -756,19 +771,32 @@ export abstract class ExtHostDebugServiceBase extends DisposableCls implements I
 					const bp = this._breakpoints.get(bpd.id);
 					if (bp) {
 						if (bp instanceof FunctionBreakpoint && bpd.type === 'function') {
-							const fbp = <any>bp;
+							const fbp = <Mutable<FunctionBreakpoint>>bp;
 							fbp.enabled = bpd.enabled;
 							fbp.condition = bpd.condition;
 							fbp.hitCondition = bpd.hitCondition;
 							fbp.logMessage = bpd.logMessage;
 							fbp.functionName = bpd.functionName;
+							fbp.mode = bpd.mode;
 						} else if (bp instanceof SourceBreakpoint && bpd.type === 'source') {
-							const sbp = <any>bp;
+							const sbp = <Mutable<SourceBreakpoint>>bp;
 							sbp.enabled = bpd.enabled;
 							sbp.condition = bpd.condition;
 							sbp.hitCondition = bpd.hitCondition;
 							sbp.logMessage = bpd.logMessage;
 							sbp.location = new Location(URI.revive(bpd.uri), new Position(bpd.line, bpd.character));
+							sbp.mode = bpd.mode;
+						} else if (bp instanceof DataBreakpoint && bpd.type === 'data') {
+							const dbp = <Mutable<DataBreakpoint>>bp;
+							dbp.enabled = bpd.enabled;
+							dbp.condition = bpd.condition;
+							dbp.hitCondition = bpd.hitCondition;
+							dbp.logMessage = bpd.logMessage;
+							dbp.label = bpd.label;
+							dbp.source = bpd.source;
+							dbp.canPersist = bpd.canPersist;
+							dbp.mode = bpd.mode;
+							dbp.accessType = bpd.accessType;
 						}
 						c.push(bp);
 					}

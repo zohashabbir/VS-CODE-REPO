@@ -173,7 +173,7 @@ export class MainThreadDebugService implements MainThreadDebugServiceShape, IDeb
 		const bps = this.debugService.getModel().getBreakpoints();
 		const fbps = this.debugService.getModel().getFunctionBreakpoints();
 		const dbps = this.debugService.getModel().getDataBreakpoints();
-		if (bps.length > 0 || fbps.length > 0) {
+		if (bps.length > 0 || fbps.length > 0 || dbps.length > 0) {
 			this._proxy.$acceptBreakpointsDelta({
 				added: this.convertToDto(bps).concat(this.convertToDto(fbps)).concat(this.convertToDto(dbps))
 			});
@@ -234,10 +234,19 @@ export class MainThreadDebugService implements MainThreadDebugServiceShape, IDeb
 			} else if (dto.type === 'data') {
 				this.debugService.addDataBreakpoint({
 					description: dto.label,
-					src: { type: DataBreakpointSetType.Variable, dataId: dto.dataId },
+					src: dto.source.type === 'variable' ? { type: DataBreakpointSetType.Variable, dataId: dto.source.dataId }
+						: dto.source.type === 'address' ? { type: DataBreakpointSetType.Address, address: dto.source.address, bytes: dto.source.bytes }
+							: dto.source.type === 'expression' ? { type: DataBreakpointSetType.Expression, expression: dto.source.expression }
+								: dto.source.frameId ? { type: DataBreakpointSetType.Scoped, expression: dto.source.expression, frameId: dto.source.frameId }
+									: dto.source.variablesReference ? { type: DataBreakpointSetType.Scoped, variable: dto.source.variable, variablesReference: dto.source.variablesReference }
+										: { type: DataBreakpointSetType.Variable, dataId: '' }, // should not happen
+					condition: dto.condition,
+					enabled: dto.enabled,
+					hitCondition: dto.hitCondition,
 					canPersist: dto.canPersist,
 					accessTypes: dto.accessTypes,
 					accessType: dto.accessType,
+					logMessage: dto.logMessage,
 					mode: dto.mode
 				});
 			}
@@ -450,21 +459,28 @@ export class MainThreadDebugService implements MainThreadDebugServiceShape, IDeb
 					condition: fbp.condition,
 					hitCondition: fbp.hitCondition,
 					logMessage: fbp.logMessage,
-					functionName: fbp.name
+					functionName: fbp.name,
+					mode: fbp.mode
 				} satisfies IFunctionBreakpointDto;
 			} else if ('src' in bp) {
 				const dbp: IDataBreakpoint = bp;
 				return {
 					type: 'data',
 					id: dbp.getId(),
-					dataId: dbp.src.type === DataBreakpointSetType.Variable ? dbp.src.dataId : dbp.src.address,
+					source: dbp.src.type === DataBreakpointSetType.Variable ? { type: 'variable', dataId: dbp.src.dataId }
+						: dbp.src.type === DataBreakpointSetType.Address ? { type: 'address', address: dbp.src.address, bytes: dbp.src.bytes }
+							: dbp.src.type === DataBreakpointSetType.Expression ? { type: 'expression', expression: dbp.src.expression }
+								: dbp.src.frameId ? { type: 'scoped', expression: dbp.src.expression, frameId: dbp.src.frameId }
+									: dbp.src.variablesReference ? { type: 'scoped', variable: dbp.src.variable, variablesReference: dbp.src.variablesReference }
+										: { type: 'variable', dataId: '' }, // should not happen
 					enabled: dbp.enabled,
 					condition: dbp.condition,
 					hitCondition: dbp.hitCondition,
 					logMessage: dbp.logMessage,
 					accessType: dbp.accessType,
 					label: dbp.description,
-					canPersist: dbp.canPersist
+					canPersist: dbp.canPersist,
+					mode: dbp.mode
 				} satisfies IDataBreakpointDto;
 			} else if ('uri' in bp) {
 				const sbp: IBreakpoint = bp;
@@ -478,6 +494,7 @@ export class MainThreadDebugService implements MainThreadDebugServiceShape, IDeb
 					uri: sbp.uri,
 					line: sbp.lineNumber > 0 ? sbp.lineNumber - 1 : 0,
 					character: (typeof sbp.column === 'number' && sbp.column > 0) ? sbp.column - 1 : 0,
+					mode: sbp.mode
 				} satisfies ISourceBreakpointDto;
 			} else {
 				return undefined;
