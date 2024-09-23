@@ -727,14 +727,37 @@ export const SpeechTimeoutDefault = 1200;
 export class DynamicSpeechAccessibilityConfiguration extends Disposable implements IWorkbenchContribution {
 
 	static readonly ID = 'workbench.contrib.dynamicSpeechAccessibilityConfiguration';
-
+	private _hasMigratedSetting = false;
 	constructor(
 		@ISpeechService private readonly speechService: ISpeechService,
 		@IProductService private readonly productService: IProductService
 	) {
 		super();
 
-		this._register(Event.runAndSubscribe(speechService.onDidChangeHasSpeechProvider, () => this.updateConfiguration()));
+		this._register(Event.runAndSubscribe(speechService.onDidChangeHasSpeechProvider, () => {
+			this.updateConfiguration();
+			if (!this._hasMigratedSetting) {
+				this._hasMigratedSetting = true;
+				setTimeout(() => {
+					this.updateConfiguration();
+				}, 1000);
+				if (Registry.knows(WorkbenchExtensions.ConfigurationMigration)) {
+					Registry.as<IConfigurationMigrationRegistry>(WorkbenchExtensions.ConfigurationMigration)
+						.registerConfigurationMigrations([{
+							key: 'accessibility.voice.autoSynthesize',
+							migrateFn: (value, accessor) => {
+								if (value === undefined || typeof value !== 'string') {
+									return [];
+								}
+								const newValue = value === 'on' || value === 'auto';
+								return [
+									['accessibility.voice.autoSynthesize', { value: newValue }],
+								];
+							}
+						}]);
+				}
+			}
+		}));
 	}
 
 	private updateConfiguration(): void {
@@ -768,15 +791,9 @@ export class DynamicSpeechAccessibilityConfiguration extends Disposable implemen
 					'enumItemLabels': languagesSorted.map(key => languages[key].name)
 				},
 				[AccessibilityVoiceSettingId.AutoSynthesize]: {
-					'type': 'string',
-					'enum': ['on', 'off', 'auto'],
-					'enumDescriptions': [
-						localize('accessibility.voice.autoSynthesize.on', "Enable the feature. When a screen reader is enabled, note that this will disable aria updates."),
-						localize('accessibility.voice.autoSynthesize.off', "Disable the feature."),
-						localize('accessibility.voice.autoSynthesize.auto', "When a screen reader is detected, disable the feature. Otherwise, enable the feature.")
-					],
-					'markdownDescription': localize('autoSynthesize', "Whether a textual response should automatically be read out aloud when speech was used as input. For example in a chat session, a response is automatically synthesized when voice was used as chat request."),
-					'default': this.productService.quality !== 'stable' ? 'auto' : 'off', // TODO@bpasero decide on a default
+					'type': 'boolean',
+					'default': this.productService.quality !== 'stable' ? true : false, // TODO@bpasero decide on a default
+					'markdownDescription': localize('autoSynthesize', "Whether a textual response should automatically be read out aloud when speech was used as input. For example in a chat session, a response is automatically synthesized when voice was used as chat request. For screen reader users, this will disable aria announcements."),
 					'tags': ['accessibility']
 				}
 			}
