@@ -1057,6 +1057,7 @@ function parseGitChanges(repositoryRoot: string, raw: string): Change[] {
 export interface PullOptions {
 	unshallow?: boolean;
 	tags?: boolean;
+	autoStash?: boolean;
 	readonly cancellationToken?: CancellationToken;
 }
 
@@ -1990,6 +1991,10 @@ export class Repository {
 
 		if (options.unshallow) {
 			args.push('--unshallow');
+		}
+
+		if (options.autoStash) {
+			args.push('--autostash');
 		}
 
 		if (rebase) {
