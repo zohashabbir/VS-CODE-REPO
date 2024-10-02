@@ -23,6 +23,7 @@ import { NullLogService } from '../../../../../../platform/log/common/log.js';
 import { ITerminalLogService } from '../../../../../../platform/terminal/common/terminal.js';
 import { importAMDNodeModule } from '../../../../../../amdX.js';
 import { ensureNoDisposablesAreLeakedInTestSuite } from '../../../../../../base/test/common/utils.js';
+import { observableValue } from '../../../../../../base/common/observable.js';
 
 const unixLinks: (string | { link: string; resource: URI })[] = [
 	// Absolute
@@ -218,7 +219,7 @@ suite('Workbench - TerminalLocalLinkDetector', () => {
 	suite('platform independent', () => {
 		setup(() => {
 			detector = instantiationService.createInstance(TerminalLocalLinkDetector, xterm, store.add(new TerminalCapabilityStore()), {
-				initialCwd: '/parent/cwd',
+				initialCwd: observableValue('', '/parent/cwd'),
 				os: OperatingSystem.Linux,
 				remoteAuthority: undefined,
 				userHome: '/home',
@@ -255,7 +256,7 @@ suite('Workbench - TerminalLocalLinkDetector', () => {
 	suite('macOS/Linux', () => {
 		setup(() => {
 			detector = instantiationService.createInstance(TerminalLocalLinkDetector, xterm, store.add(new TerminalCapabilityStore()), {
-				initialCwd: '/parent/cwd',
+				initialCwd: observableValue('', '/parent/cwd'),
 				os: OperatingSystem.Linux,
 				remoteAuthority: undefined,
 				userHome: '/home',
@@ -297,7 +298,7 @@ suite('Workbench - TerminalLocalLinkDetector', () => {
 
 			setup(() => {
 				detector = instantiationService.createInstance(TerminalLocalLinkDetector, xterm, store.add(new TerminalCapabilityStore()), {
-					initialCwd: 'C:\\Parent\\Cwd',
+					initialCwd: observableValue('', 'C:\\Parent\\Cwd'),
 					os: OperatingSystem.Windows,
 					remoteAuthority: undefined,
 					userHome: 'C:\\Home',

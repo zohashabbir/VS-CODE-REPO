@@ -83,7 +83,7 @@ export class TerminalLinkResolver implements ITerminalLinkResolver {
 		}
 		// Handle all non-WSL links
 		else {
-			const preprocessedLink = this._preprocessPath(linkUrl, processManager.initialCwd, processManager.os, processManager.userHome);
+			const preprocessedLink = this._preprocessPath(linkUrl, processManager.initialCwd.get(), processManager.os, processManager.userHome);
 			if (!preprocessedLink) {
 				cache.set(link, null);
 				return null;
@@ -121,7 +121,7 @@ export class TerminalLinkResolver implements ITerminalLinkResolver {
 		}
 	}
 
-	protected _preprocessPath(link: string, initialCwd: string, os: OperatingSystem | undefined, userHome: string | undefined): string | null {
+	protected _preprocessPath(link: string, initialCwd: string | undefined, os: OperatingSystem | undefined, userHome: string | undefined): string | null {
 		const osPath = this._getOsPath(os);
 		if (link.charAt(0) === '~') {
 			// Resolve ~ -> userHome

@@ -24,6 +24,7 @@ import { ISearchService } from '../../../../services/search/common/search.js';
 import { IConfigurationService } from '../../../../../platform/configuration/common/configuration.js';
 import { detectLinks, getLinkSuffix } from './terminalLinkParsing.js';
 import { ITerminalLogService } from '../../../../../platform/terminal/common/terminal.js';
+import type { IObservable } from '../../../../../base/common/observable.js';
 
 export class TerminalLocalFileLinkOpener implements ITerminalLinkOpener {
 	constructor(
@@ -81,7 +82,7 @@ export class TerminalSearchLinkOpener implements ITerminalLinkOpener {
 
 	constructor(
 		private readonly _capabilities: ITerminalCapabilityStore,
-		private readonly _initialCwd: string,
+		private readonly _initialCwd: IObservable<string | undefined>,
 		private readonly _localFileOpener: TerminalLocalFileLinkOpener,
 		private readonly _localFolderInWorkspaceOpener: TerminalLocalFolderInWorkspaceLinkOpener,
 		private readonly _getOS: () => OperatingSystem,
@@ -175,9 +176,10 @@ export class TerminalSearchLinkOpener implements ITerminalLinkOpener {
 		const os = this._getOS();
 		const pathModule = osPathModule(os);
 		const isAbsolute = pathModule.isAbsolute(sanitizedLink);
+		const initialCwd = this._initialCwd.get();
 		let absolutePath: string | undefined = isAbsolute ? sanitizedLink : undefined;
-		if (!isAbsolute && this._initialCwd.length > 0) {
-			absolutePath = pathModule.join(this._initialCwd, sanitizedLink);
+		if (!isAbsolute && initialCwd && initialCwd.length > 0) {
+			absolutePath = pathModule.join(initialCwd, sanitizedLink);
 		}
 
 		// Try open as an absolute link

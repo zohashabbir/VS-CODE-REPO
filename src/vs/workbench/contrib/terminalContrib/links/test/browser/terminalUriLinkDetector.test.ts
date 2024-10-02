@@ -19,6 +19,7 @@ import { importAMDNodeModule } from '../../../../../../amdX.js';
 import { ensureNoDisposablesAreLeakedInTestSuite } from '../../../../../../base/test/common/utils.js';
 import { NullLogService } from '../../../../../../platform/log/common/log.js';
 import { ITerminalLogService } from '../../../../../../platform/terminal/common/terminal.js';
+import { observableValue } from '../../../../../../base/common/observable.js';
 
 suite('Workbench - TerminalUriLinkDetector', () => {
 	const store = ensureNoDisposablesAreLeakedInTestSuite();
@@ -47,7 +48,7 @@ suite('Workbench - TerminalUriLinkDetector', () => {
 		const TerminalCtor = (await importAMDNodeModule<typeof import('@xterm/xterm')>('@xterm/xterm', 'lib/xterm.js')).Terminal;
 		xterm = new TerminalCtor({ allowProposedApi: true, cols: 80, rows: 30 });
 		detector = instantiationService.createInstance(TerminalUriLinkDetector, xterm, {
-			initialCwd: '/parent/cwd',
+			initialCwd: observableValue('', '/parent/cwd'),
 			os: OperatingSystem.Linux,
 			remoteAuthority: undefined,
 			userHome: '/home',

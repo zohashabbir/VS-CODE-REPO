@@ -42,6 +42,7 @@ import { getActiveWindow, runWhenWindowIdle } from '../../../../base/browser/dom
 import { mainWindow } from '../../../../base/browser/window.js';
 import { shouldUseEnvironmentVariableCollection } from '../../../../platform/terminal/common/terminalEnvironment.js';
 import { TerminalContribSettingId } from '../terminalContribExports.js';
+import { observableValue, type IObservable } from '../../../../base/common/observable.js';
 
 const enum ProcessConstants {
 	/**
@@ -83,7 +84,6 @@ export class TerminalProcessManager extends Disposable implements ITerminalProce
 	private _process: ITerminalChildProcess | null = null;
 	private _processType: ProcessType = ProcessType.Process;
 	private _preLaunchInputQueue: string[] = [];
-	private _initialCwd: string | undefined;
 	private _extEnvironmentVariableCollection: IMergedEnvironmentVariableCollection | undefined;
 	private _ackDataBufferer: AckDataBufferer;
 	private _hasWrittenData: boolean = false;
@@ -96,6 +96,13 @@ export class TerminalProcessManager extends Disposable implements ITerminalProce
 
 	private _shellLaunchConfig?: IShellLaunchConfig;
 	private _dimensions: ITerminalDimensions = { cols: 0, rows: 0 };
+
+	// #region Observables
+
+	private _initialCwd = observableValue<string | undefined>(this, undefined);
+	get initialCwd(): IObservable<string | undefined> { return this._initialCwd; }
+
+	// #endregion
 
 	private readonly _onPtyDisconnect = this._register(new Emitter<void>());
 	readonly onPtyDisconnect = this._onPtyDisconnect.event;
@@ -358,8 +365,8 @@ export class TerminalProcessManager extends Disposable implements ITerminalProce
 		this._processListeners = [
 			newProcess.onProcessReady((e: IProcessReadyEvent) => {
 				this.shellProcessId = e.pid;
-				this._initialCwd = e.cwd;
-				this._onDidChangeProperty.fire({ type: ProcessPropertyType.InitialCwd, value: this._initialCwd });
+				this._initialCwd.set(e.cwd, undefined);
+				this._onDidChangeProperty.fire({ type: ProcessPropertyType.InitialCwd, value: e.cwd });
 				this._onProcessReady.fire(e);
 
 				if (this._preLaunchInputQueue.length > 0 && this._process) {
@@ -611,10 +618,6 @@ export class TerminalProcessManager extends Disposable implements ITerminalProce
 		this._dataFilter.disableSeamlessRelaunch();
 		this._hasWrittenData = true;
 		this._process?.processBinary(data);
-	}
-
-	get initialCwd(): string {
-		return this._initialCwd ?? '';
 	}
 
 	async refreshProperty<T extends ProcessPropertyType>(type: T): Promise<IProcessPropertyMap[T]> {

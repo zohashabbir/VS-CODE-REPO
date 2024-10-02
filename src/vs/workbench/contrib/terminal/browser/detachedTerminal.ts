@@ -19,6 +19,7 @@ import { TerminalWidgetManager } from './widgets/widgetManager.js';
 import { XtermTerminal } from './xterm/xtermTerminal.js';
 import { IEnvironmentVariableInfo } from '../common/environmentVariable.js';
 import { ITerminalProcessInfo, ProcessState } from '../common/terminal.js';
+import { observableValue, type IObservable } from '../../../../base/common/observable.js';
 
 export class DetachedTerminal extends Disposable implements IDetachedTerminalInstance {
 	private readonly _widgets = this._register(new TerminalWidgetManager());
@@ -122,7 +123,7 @@ export class DetachedProcessInfo implements ITerminalProcessInfo {
 	remoteAuthority: string | undefined;
 	os: OperatingSystem | undefined;
 	userHome: string | undefined;
-	initialCwd = '';
+	initialCwd: IObservable<string | undefined>;
 	environmentVariableInfo: IEnvironmentVariableInfo | undefined;
 	persistentProcessId: number | undefined;
 	shouldPersist = false;
@@ -133,7 +134,7 @@ export class DetachedProcessInfo implements ITerminalProcessInfo {
 	shellIntegrationNonce = '';
 	extEnvironmentVariableCollection: IMergedEnvironmentVariableCollection | undefined;
 
-	constructor(initialValues: Partial<ITerminalProcessInfo>) {
-		Object.assign(this, initialValues);
+	constructor(initialCwd: string | undefined) {
+		this.initialCwd = observableValue(this, initialCwd);
 	}
 }

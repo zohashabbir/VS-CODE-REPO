@@ -22,6 +22,7 @@ import { ITerminalLogService } from '../../../../../../platform/terminal/common/
 import { TerminalMultiLineLinkDetector } from '../../browser/terminalMultiLineLinkDetector.js';
 import { importAMDNodeModule } from '../../../../../../amdX.js';
 import { ensureNoDisposablesAreLeakedInTestSuite } from '../../../../../../base/test/common/utils.js';
+import { observableValue } from '../../../../../../base/common/observable.js';
 
 const unixLinks: (string | { link: string; resource: URI })[] = [
 	// Absolute
@@ -159,7 +160,7 @@ suite('Workbench - TerminalMultiLineLinkDetector', () => {
 	suite('macOS/Linux', () => {
 		setup(() => {
 			detector = instantiationService.createInstance(TerminalMultiLineLinkDetector, xterm, {
-				initialCwd: '/parent/cwd',
+				initialCwd: observableValue('', '/parent/cwd'),
 				os: OperatingSystem.Linux,
 				remoteAuthority: undefined,
 				userHome: '/home',
@@ -189,7 +190,7 @@ suite('Workbench - TerminalMultiLineLinkDetector', () => {
 		suite('Windows', () => {
 			setup(() => {
 				detector = instantiationService.createInstance(TerminalMultiLineLinkDetector, xterm, {
-					initialCwd: 'C:\\Parent\\Cwd',
+					initialCwd: observableValue('', 'C:\\Parent\\Cwd'),
 					os: OperatingSystem.Windows,
 					remoteAuthority: undefined,
 					userHome: 'C:\\Home',

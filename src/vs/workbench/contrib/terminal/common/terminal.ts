@@ -19,6 +19,7 @@ import { AccessibilityCommandId } from '../../accessibility/common/accessibility
 import { IEnvironmentVariableInfo } from './environmentVariable.js';
 import { IExtensionPointDescriptor } from '../../../services/extensions/common/extensionsRegistry.js';
 import { defaultTerminalContribCommandsToSkipShell } from '../terminalContribExports.js';
+import type { IObservable } from '../../../../base/common/observable.js';
 
 export const TERMINAL_VIEW_ID = 'terminal';
 
@@ -258,7 +259,7 @@ export interface ITerminalProcessInfo {
 	readonly remoteAuthority: string | undefined;
 	readonly os: OperatingSystem | undefined;
 	readonly userHome: string | undefined;
-	readonly initialCwd: string;
+	readonly initialCwd: IObservable<string | undefined>;
 	readonly environmentVariableInfo: IEnvironmentVariableInfo | undefined;
 	readonly persistentProcessId: number | undefined;
 	readonly shouldPersist: boolean;

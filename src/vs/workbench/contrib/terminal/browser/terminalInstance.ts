@@ -161,8 +161,6 @@ export class TerminalInstance extends Disposable implements ITerminalInstance {
 	private _rows: number = 0;
 	private _fixedCols: number | undefined;
 	private _fixedRows: number | undefined;
-	private _cwd: string | undefined = undefined;
-	private _initialCwd: string | undefined = undefined;
 	private _injectedArgs: string[] | undefined = undefined;
 	private _layoutSettingsChanged: boolean = true;
 	private _dimensionsOverride: ITerminalDimensionsOverride | undefined;
@@ -278,8 +276,6 @@ export class TerminalInstance extends Disposable implements ITerminalInstance {
 	get sequence(): string | undefined { return this._sequence; }
 	get staticTitle(): string | undefined { return this._staticTitle; }
 	get workspaceFolder(): IWorkspaceFolder | undefined { return this._workspaceFolder; }
-	get cwd(): string | undefined { return this._cwd; }
-	get initialCwd(): string | undefined { return this._initialCwd; }
 	get description(): string | undefined {
 		if (this._description) {
 			return this._description;
@@ -297,8 +293,13 @@ export class TerminalInstance extends Disposable implements ITerminalInstance {
 
 	// #region Observables
 
+	private readonly _cwd = observableValue<string | undefined>(this, undefined);
+	readonly cwd: IObservable<string | undefined> = this._cwd;
 	private readonly _title = observableValue<string>(this, '');
 	readonly title: IObservable<string> = this._title;
+
+	// Forwarded observables
+	get initialCwd(): IObservable<string | undefined> { return this._processManager.initialCwd; }
 
 	// #endregion
 
@@ -457,7 +458,8 @@ export class TerminalInstance extends Disposable implements ITerminalInstance {
 		this._register(this.capabilities.onDidAddCapabilityType(e => {
 			if (e === TerminalCapability.CwdDetection) {
 				this.capabilities.get(TerminalCapability.CwdDetection)?.onDidChangeCwd(e => {
-					this._cwd = e;
+					this._cwd.set(e, undefined);
+					// TODO: set title based on cwd obs
 					// TODO: The cwd may be included in the configured title, this isn't clear without a comment
 					this._setTitle(this._title.get(), TitleEventSource.Config);
 				});
@@ -515,7 +517,7 @@ export class TerminalInstance extends Disposable implements ITerminalInstance {
 
 			// Re-establish the title after reconnect
 			if (this.shellLaunchConfig.attachPersistentProcess) {
-				this._cwd = this.shellLaunchConfig.attachPersistentProcess.cwd;
+				this._cwd.set(this.shellLaunchConfig.attachPersistentProcess.cwd, undefined);
 				this._setTitle(this.shellLaunchConfig.attachPersistentProcess.title, this.shellLaunchConfig.attachPersistentProcess.titleSource);
 				this.setShellType(this.shellType);
 			}
@@ -562,6 +564,12 @@ export class TerminalInstance extends Disposable implements ITerminalInstance {
 			}
 		}));
 		this._register(this._workspaceContextService.onDidChangeWorkspaceFolders(() => this._labelComputer?.refreshLabel(this)));
+
+		this._register(autorun(reader => {
+			reader.readObservable(this.cwd);
+			reader.readObservable(this.initialCwd);
+			this._labelComputer?.refreshLabel(this);
+		}));
 
 		// Clear out initial data events after 10 seconds, hopefully extension hosts are up and
 		// running at that point.
@@ -1377,7 +1385,6 @@ export class TerminalInstance extends Disposable implements ITerminalInstance {
 		this.capabilities.add(processManager.capabilities);
 		this._register(processManager.onProcessReady(async (e) => {
 			this._onProcessIdReady.fire(this);
-			this._initialCwd = await this.getInitialCwd();
 			// Set the initial name based on the _resolved_ shell launch config, this will also
 			// ensure the resolved icon gets shown
 			if (!this._labelComputer) {
@@ -1407,12 +1414,10 @@ export class TerminalInstance extends Disposable implements ITerminalInstance {
 		this._register(processManager.onDidChangeProperty(({ type, value }) => {
 			switch (type) {
 				case ProcessPropertyType.Cwd:
-					this._cwd = value;
+					this._cwd.set(value, undefined);
 					this._labelComputer?.refreshLabel(this);
 					break;
 				case ProcessPropertyType.InitialCwd:
-					this._initialCwd = value;
-					this._cwd = this._initialCwd;
 					this._setTitle(this._title.get(), TitleEventSource.Config);
 					this._icon = this._shellLaunchConfig.attachPersistentProcess?.icon || this._shellLaunchConfig.icon;
 					this._onIconChanged.fire({ instance: this, userInitiated: false });
@@ -1472,10 +1477,10 @@ export class TerminalInstance extends Disposable implements ITerminalInstance {
 			if (!trusted) {
 				this._onProcessExit({ message: nls.localize('workspaceNotTrustedCreateTerminal', "Cannot launch a terminal process in an untrusted workspace") });
 			}
-		} else if (this._cwd && this._userHome && this._cwd !== this._userHome) {
+		} else if (this._cwd.get() && this._userHome && this._cwd.get() !== this._userHome) {
 			// something strange is going on if cwd is not userHome in an empty workspace
 			this._onProcessExit({
-				message: nls.localize('workspaceNotTrustedCreateTerminalCwd', "Cannot launch a terminal process in an untrusted workspace with cwd {0} and userHome {1}", this._cwd, this._userHome)
+				message: nls.localize('workspaceNotTrustedCreateTerminalCwd', "Cannot launch a terminal process in an untrusted workspace with cwd {0} and userHome {1}", this._cwd.get(), this._userHome)
 			});
 		}
 
@@ -1568,7 +1573,7 @@ export class TerminalInstance extends Disposable implements ITerminalInstance {
 		if (this._isExiting) {
 			return;
 		}
-		const parsedExitResult = parseExitResult(exitCodeOrError, this.shellLaunchConfig, this._processManager.processState, this._initialCwd);
+		const parsedExitResult = parseExitResult(exitCodeOrError, this.shellLaunchConfig, this._processManager.processState, this.initialCwd.get());
 
 		if (this._usedShellIntegrationInjection && this._processManager.processState === ProcessState.KilledDuringLaunch && parsedExitResult?.code !== 0) {
 			this._relaunchWithShellIntegrationDisabled(parsedExitResult?.message);
@@ -2183,20 +2188,13 @@ export class TerminalInstance extends Disposable implements ITerminalInstance {
 		this.statusList.add(info.getStatus({ workspaceFolder }));
 	}
 
-	async getInitialCwd(): Promise<string> {
-		if (!this._initialCwd) {
-			this._initialCwd = this._processManager.initialCwd;
-		}
-		return this._initialCwd;
-	}
-
-	async getCwd(): Promise<string> {
+	async getBestAvailableCwd(): Promise<string | undefined> {
 		if (this.capabilities.has(TerminalCapability.CwdDetection)) {
 			return this.capabilities.get(TerminalCapability.CwdDetection)!.getCwd();
 		} else if (this.capabilities.has(TerminalCapability.NaiveCwdDetection)) {
 			return this.capabilities.get(TerminalCapability.NaiveCwdDetection)!.getCwd();
 		}
-		return this._processManager.initialCwd;
+		return this.initialCwd.get();
 	}
 
 	private async _refreshProperty<T extends ProcessPropertyType>(type: T): Promise<IProcessPropertyMap[T]> {
@@ -2540,7 +2538,7 @@ export class TerminalLabelComputer extends Disposable {
 	) {
 		const type = instance.shellLaunchConfig.attachPersistentProcess?.type || instance.shellLaunchConfig.type;
 		const templateProperties: ITerminalLabelTemplateProperties = {
-			cwd: instance.cwd || instance.initialCwd || '',
+			cwd: instance.cwd.get() || instance.initialCwd.get() || '',
 			cwdFolder: '',
 			workspaceFolderName: instance.workspaceFolder?.name,
 			workspaceFolder: instance.workspaceFolder ? path.basename(instance.workspaceFolder.uri.fsPath) : undefined,
@@ -2567,9 +2565,10 @@ export class TerminalLabelComputer extends Disposable {
 
 		// Only set cwdFolder if detection is on
 		if (templateProperties.cwd && detection && (!instance.shellLaunchConfig.isFeatureTerminal || labelType === TerminalLabelType.Title)) {
+			const cwdValue = instance.cwd.get();
 			const cwdUri = URI.from({
 				scheme: instance.workspaceFolder?.uri.scheme || Schemas.file,
-				path: instance.cwd ? path.resolve(instance.cwd) : undefined
+				path: cwdValue ? path.resolve(cwdValue) : undefined
 			});
 			// Multi-root workspaces always show cwdFolder to disambiguate them, otherwise only show
 			// when it differs from the workspace folder in which it was launched from

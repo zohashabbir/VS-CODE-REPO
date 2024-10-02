@@ -25,6 +25,7 @@ import type { ILink, Terminal } from '@xterm/xterm';
 import { TerminalLinkResolver } from '../../browser/terminalLinkResolver.js';
 import { importAMDNodeModule } from '../../../../../../amdX.js';
 import { ensureNoDisposablesAreLeakedInTestSuite } from '../../../../../../base/test/common/utils.js';
+import { observableValue } from '../../../../../../base/common/observable.js';
 
 const defaultTerminalConfig: Partial<ITerminalConfiguration> = {
 	fontFamily: 'monospace',
@@ -90,7 +91,7 @@ suite('TerminalLinkManager', () => {
 		xterm = store.add(new TerminalCtor({ allowProposedApi: true, cols: 80, rows: 30 }));
 		linkManager = store.add(instantiationService.createInstance(TestLinkManager, xterm, upcastPartial<ITerminalProcessManager>({
 			get initialCwd() {
-				return '';
+				return observableValue('', undefined);
 			}
 		}), {
 			get<T extends TerminalCapability>(capability: T): ITerminalCapabilityImplMap[T] | undefined {

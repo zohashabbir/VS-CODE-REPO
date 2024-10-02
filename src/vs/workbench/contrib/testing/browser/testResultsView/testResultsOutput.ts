@@ -368,12 +368,12 @@ export class TerminalMessagePeek extends Disposable implements IPeekOutputRender
 			updateCwd: () => { },
 		});
 
-		return this.terminal.value = await this.terminalService.createDetachedTerminal({
+		const term = this.terminal.value = await this.terminalService.createDetachedTerminal({
 			rows: 10,
 			cols: 80,
 			readonly: true,
 			capabilities,
-			processInfo: new DetachedProcessInfo({ initialCwd: cwd.value }),
+			processInfo: new DetachedProcessInfo(cwd.value),
 			colorProvider: {
 				getBackgroundColor: theme => {
 					const terminalBackground = theme.getColor(TERMINAL_BACKGROUND_COLOR);
@@ -390,6 +390,7 @@ export class TerminalMessagePeek extends Disposable implements IPeekOutputRender
 				},
 			}
 		});
+		return term;
 	}
 
 	public async update(subject: InspectSubject): Promise<boolean> {

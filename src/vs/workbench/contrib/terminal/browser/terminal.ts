@@ -610,8 +610,16 @@ export interface ITerminalInstance extends IBaseTerminalInstance {
 	readonly sequence?: string;
 	readonly staticTitle?: string;
 	readonly workspaceFolder?: IWorkspaceFolder;
-	readonly cwd?: string;
-	readonly initialCwd?: string;
+	/**
+	 * Gets the _high confidence_ current working directory, this will only be defined if shell
+	 * integration appears to be working and is sending the current working directory.
+	 */
+	readonly cwd: IObservable<string | undefined>;
+	/**
+	 * Gets the _initial_ current working directory of the terminal, that was originally set when
+	 * the terminal was created. This will not be set
+	 */
+	readonly initialCwd: IObservable<string | undefined>;
 	readonly os?: OperatingSystem;
 	readonly usedShellIntegrationInjection: boolean;
 	readonly injectedArgs: string[] | undefined;
@@ -1003,16 +1011,15 @@ export interface ITerminalInstance extends IBaseTerminalInstance {
 	toggleSizeToContentWidth(): Promise<void>;
 
 	/**
-	 * Gets the initial current working directory, fetching it from the backend if required.
+	 * Gets the best available current working directory, based on the information available. This
+	 * will return in this order:
+	 *
+	 * - Cwd from shell integration if available.
+	 * - macOS: via `lsof`
+	 * - Linux: via procfs.
+	 * - Windows: The initial cwd if it's been reported from the process manager.
 	 */
-	getInitialCwd(): Promise<string>;
-
-	/**
-	 * Gets the current working directory from cwd detection capabilities if available, otherwise
-	 * from the backend. This will return the initial cwd if cwd detection is not available (ie.
-	 * on Windows when shell integration is disabled).
-	 */
-	getCwd(): Promise<string>;
+	getBestAvailableCwd(): Promise<string | undefined>;
 
 	/**
 	 * Sets the title of the terminal to the provided string. If no title is provided, it will reset
