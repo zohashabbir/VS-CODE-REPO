@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { app, BrowserWindow, desktopCapturer, protocol, session, Session, systemPreferences, screen, WebFrameMain } from 'electron';
+import { app, BrowserWindow, desktopCapturer, protocol, session, Session, systemPreferences, screen, WebFrameMain, dialog } from 'electron';
 import { addUNCHostToAllowlist, disableUNCAccessRestrictions } from '../../base/node/unc.js';
 import { validatedIpcMain } from '../../base/parts/ipc/electron-main/ipcMain.js';
 import { hostname, release } from 'os';
@@ -196,54 +196,37 @@ export class CodeApplication extends Disposable {
 			}
 			return false;
 		});
+
 		session.defaultSession.setDisplayMediaRequestHandler(async (request, callback) => {
+			try {
+				// Get all window sources
+				const windows = await desktopCapturer.getSources({ types: ['window'] });
 
-			// Get the currently focused window
-			const focusedWindow = BrowserWindow.getFocusedWindow();
+				// Create a list of window names for selection
+				const windowNames = windows.map(window => window.name);
 
-			if (!focusedWindow) {
-				return;
-			}
+				// Show a dialog for the user to select a window
+				const { response } = await dialog.showMessageBox({
+					type: 'question',
+					buttons: windowNames,
+					title: 'Select a Window',
+					message: 'Please choose a window to capture:'
+				});
 
-			// Get the bounds (position and size) of the focused window
-			const windowBounds = focusedWindow.getBounds();
+				// Get the selected window based on the user's choice
+				const selectedWindow = windows[response];
 
-			// Get all the screen sources
-			const screens = await desktopCapturer.getSources({ types: ['screen'] });
-
-			// Get the display that contains the focused window
-			const displays = screen.getAllDisplays();
-
-			// Find the screen that contains the focused window
-			for (const display of displays) {
-				const displayBounds = display.bounds;
-
-				// Check if the window is within the display's bounds. The center of the window is
-				// used since maximizing actually causes the window to go beyond the screen. There
-				// is also the case where a window could be spread across multiple screens.
-				const windowCenter = {
-					x: windowBounds.x + windowBounds.width / 2,
-					y: windowBounds.y + windowBounds.height / 2,
-				};
-				if (
-					windowCenter.x >= displayBounds.x &&
-					windowCenter.x <= displayBounds.x + displayBounds.width &&
-					windowCenter.y >= displayBounds.y &&
-					windowCenter.y <= displayBounds.y + displayBounds.height
-				) {
-					// Match the display to the screen source
-					for (const source of screens) {
-						if (source.display_id === display.id.toString()) {
-							// Found the screen containing the focused window
-							callback({ video: source, audio: 'loopback' });
-							return;
-						}
-					}
+				if (selectedWindow) {
+					// Capture the selected window
+					callback({ video: selectedWindow, audio: 'loopback' });
+				} else {
+					// Fallback: if no window is selected, return the first window source
+					callback({ video: windows[0], audio: 'loopback' });
 				}
+			} catch (error) {
+				// Fallback to not capturing anything if an error occurs
+				console.error('Error capturing window:', error);
 			}
-
-			// Fallback: if no matching screen is found, return the first screen
-			callback({ video: screens[0], audio: 'loopback' });
 		});
 
 		//#endregion
